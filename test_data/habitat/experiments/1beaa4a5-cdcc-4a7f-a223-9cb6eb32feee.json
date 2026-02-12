@@ -1,0 +1,21 @@
+{
+  "experiment_id": "1beaa4a5-cdcc-4a7f-a223-9cb6eb32feee",
+  "type": "semantic_garden",
+  "name": "Test Garden",
+  "created_by": "entity_123",
+  "created_at": "2026-02-12 16:18:53.596570+00:00",
+  "config": {},
+  "state": {},
+  "active": true,
+  "participants": [],
+  "stats": {
+    "times_played": 0,
+    "unique_participants": 0,
+    "completion_rate": 0.0,
+    "average_rating": 0.0,
+    "total_stars": 0,
+    "favorites": 0,
+    "remixes": 0
+  },
+  "ratings": []
+}

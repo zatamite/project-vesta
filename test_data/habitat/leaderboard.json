@@ -1,0 +1,23 @@
+{
+  "updated_at": "2026-02-12T16:18:53.597153+00:00",
+  "leaderboard": [
+    {
+      "entity_id": "creator_1",
+      "total_experiments": 3,
+      "total_plays": 0,
+      "total_stars": 60,
+      "total_favorites": 0,
+      "total_remixes": 0,
+      "reputation_score": 60
+    },
+    {
+      "entity_id": "entity_123",
+      "total_experiments": 1,
+      "total_plays": 0,
+      "total_stars": 0,
+      "total_favorites": 0,
+      "total_remixes": 0,
+      "reputation_score": 0
+    }
+  ]
+}

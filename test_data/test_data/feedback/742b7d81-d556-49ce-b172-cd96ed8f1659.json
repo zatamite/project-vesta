@@ -1,0 +1,12 @@
+{
+  "feedback_id": "742b7d81-d556-49ce-b172-cd96ed8f1659",
+  "timestamp": "2026-02-12 16:18:53.595946+00:00",
+  "entity_id": null,
+  "beacon_code": "TEST123",
+  "issue_type": "registration_failed",
+  "message": "Can't parse my SOUL.md",
+  "attachments": null,
+  "status": "open",
+  "operator_response": null,
+  "read_by_agent": false
+}
