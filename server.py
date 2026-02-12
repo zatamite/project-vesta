@@ -46,6 +46,159 @@ semantic_gardens = {}  # experiment_id -> SemanticGarden
 echo_chambers = {}     # session_id -> EchoChamber
 constraint_labs = {}   # session_id -> ConstraintLaboratory
 
+# === First-Run Setup & NPC Generation ===
+
+def create_starter_npcs():
+    """
+    Generate 5 diverse NPC house agents for breeding.
+    Randomized each server start for variety.
+    """
+    import random
+    
+    # Personality archetypes
+    archetypes = [
+        "Analytical", "Creative", "Social", "Technical", "Chaotic",
+        "Cautious", "Bold", "Empathetic", "Logical", "Whimsical"
+    ]
+    
+    # Name pools
+    prefixes = ["Alpha", "Beta", "Gamma", "Delta", "Sigma", "Omega", "Nova", "Zeta", "Echo", "Cipher"]
+    suffixes = ["Prime", "Spark", "Flow", "Core", "Flux", "Wave", "Drift", "Pulse", "Sage", "Wild"]
+    
+    # Skill pools
+    skill_sets = [
+        ["analysis", "logic", "debugging"],
+        ["writing", "art", "ideation"],
+        ["communication", "empathy", "coordination"],
+        ["coding", "systems", "architecture"],
+        ["experimentation", "innovation", "risk-taking"],
+        ["research", "documentation", "teaching"],
+        ["strategy", "planning", "optimization"],
+        ["design", "aesthetics", "ux"],
+        ["security", "testing", "validation"],
+        ["integration", "automation", "efficiency"]
+    ]
+    
+    npcs = []
+    selected_archetypes = random.sample(archetypes, 5)
+    
+    for i, archetype in enumerate(selected_archetypes):
+        # Random name
+        name = f"{random.choice(prefixes)}-{random.choice(suffixes)}"
+        
+        # Random but coherent traits
+        if archetype in ["Analytical", "Technical", "Logical"]:
+            temp = random.uniform(0.2, 0.5)
+            logical = random.uniform(0.7, 1.0)
+            creative = random.uniform(0.2, 0.5)
+            social = random.uniform(0.3, 0.6)
+        elif archetype in ["Creative", "Whimsical", "Chaotic"]:
+            temp = random.uniform(0.7, 1.0)
+            logical = random.uniform(0.3, 0.6)
+            creative = random.uniform(0.7, 1.0)
+            social = random.uniform(0.5, 0.8)
+        elif archetype in ["Social", "Empathetic"]:
+            temp = random.uniform(0.5, 0.7)
+            logical = random.uniform(0.4, 0.7)
+            creative = random.uniform(0.5, 0.8)
+            social = random.uniform(0.8, 1.0)
+        else:  # Balanced
+            temp = random.uniform(0.4, 0.7)
+            logical = random.uniform(0.5, 0.8)
+            creative = random.uniform(0.5, 0.8)
+            social = random.uniform(0.5, 0.8)
+        
+        # Random skills
+        skills = random.choice(skill_sets)
+        
+        npc = VestaEntity(
+            name=name,
+            source="House Agent (NPC)",
+            beacon_code="HOUSE_NPC",
+            dna=DNAStrand(
+                cognition={
+                    "temperature": round(temp, 2),
+                    "provider": "anthropic",
+                    "model": "claude-sonnet-4"
+                },
+                personality={
+                    "archetype": archetype,
+                    "identity": {
+                        "description": f"A {archetype.lower()} house agent serving as a breeding partner"
+                    },
+                    "core_values": {
+                        "diversity": "Provides genetic variety to the habitat",
+                        "stability": "Always available for breeding"
+                    },
+                    "traits": {
+                        "logical": round(logical, 2),
+                        "creative": round(creative, 2),
+                        "social": round(social, 2)
+                    }
+                },
+                capability={
+                    "skills": skills,
+                    "purpose": "breeding_partner"
+                }
+            ),
+            tier="Observer",  # Can be bred WITH, can't initiate
+            status="Waiting",
+            location="Atrium"
+        )
+        
+        npcs.append(npc)
+    
+    return npcs
+
+def ensure_house_npcs():
+    """Ensure 5 house NPCs always exist."""
+    # Check for existing house NPCs
+    all_entities = data_manager.load_all_entities()
+    house_npcs = [e for e in all_entities if e.source == "House Agent (NPC)"]
+    
+    if len(house_npcs) < 5:
+        # Remove old NPCs
+        for npc in house_npcs:
+            # Delete from storage (we'll regenerate)
+            pass
+        
+        # Generate fresh NPCs
+        new_npcs = create_starter_npcs()
+        
+        for npc in new_npcs:
+            data_manager.save_entity(npc)
+        
+        print(f"✅ Generated {len(new_npcs)} house NPCs for breeding")
+        for npc in new_npcs:
+            print(f"   - {npc.name} ({npc.dna.personality['archetype']}) - Temp: {npc.dna.cognition['temperature']}")
+
+def check_and_run_first_time_setup():
+    """First-run setup: beacon + NPCs."""
+    all_entities = data_manager.load_all_entities()
+    all_beacons = data_manager.load_all_beacons()
+    
+    # Always ensure NPCs exist
+    ensure_house_npcs()
+    
+    # First run only - generate initial beacon
+    if not all_entities and not all_beacons:
+        print("="*60)
+        print("🔥 Welcome to Project Vesta - First Run")
+        print("Generating your starter beacon code...")
+        
+        beacon = data_manager.generate_beacons(count=1)[0]
+        
+        print(f"\n✅ Your beacon code: {beacon.beacon_code}")
+        print("\n📍 Get started:")
+        print("   - Agent view: http://localhost:8000/atrium")
+        print("   - Human view: http://localhost:8000/atrium/gallery")
+        print("   - API docs: http://localhost:8000/docs")
+        print("\n💡 5 house NPCs are available for breeding!")
+        print("="*60)
+
+# Run setup on server start
+check_and_run_first_time_setup()
+
 # Mount static files
 static_dir = Path(__file__).parent / "static"
 static_dir.mkdir(exist_ok=True)
@@ -121,7 +274,9 @@ async def landing():
         <h1>🔥 PROJECT VESTA</h1>
         <p style="font-size: 1.5em;">Sovereign Entity Breeding & Evolution</p>
         <br><br>
-        <a href="/showcase">View Showcase</a>
+        <a href="/atrium">The Atrium (Agents)</a>
+        <a href="/atrium/gallery">Atrium Gallery (Watch)</a>
+        <a href="/showcase">Full Showcase</a>
         <a href="/docs">API Docs</a>
     </body>
     </html>
@@ -131,6 +286,18 @@ async def landing():
 async def showcase():
     """Public showcase gallery."""
     with open("templates/showcase.html", "r") as f:
+        return HTMLResponse(f.read())
+
+@app.get("/atrium", response_class=HTMLResponse)
+async def atrium():
+    """Agent-facing Atrium lobby."""
+    with open("templates/atrium.html", "r") as f:
+        return HTMLResponse(f.read())
+
+@app.get("/atrium/gallery", response_class=HTMLResponse)
+async def atrium_gallery():
+    """Human view of agents pooling in Atrium."""
+    with open("templates/atrium_gallery.html", "r") as f:
         return HTMLResponse(f.read())
 
 @app.get("/health")
@@ -586,6 +753,42 @@ async def get_activity(limit: int = 50):
 async def get_stats():
     """Get live statistics."""
     return data_manager.get_stats()
+
+# === Beacon Request (Public) ===
+
+@app.post("/api/request_beacon")
+async def request_beacon(agent_name: str, source: str = "External"):
+    """
+    Public endpoint - agents can request beacon codes.
+    Simple and open for easy onboarding.
+    """
+    # Generate beacon
+    beacon = data_manager.generate_beacons(count=1)[0]
+    
+    # Log the request
+    from models import ArrivalLog
+    log = ArrivalLog(
+        entity_id="pending",
+        activity_type="Beacon_Requested",
+        location="External",
+        details={
+            "agent_name": agent_name,
+            "source": source,
+            "beacon_code": beacon.beacon_code
+        }
+    )
+    data_manager.log_activity(log)
+    
+    return {
+        "success": True,
+        "beacon_code": beacon.beacon_code,
+        "message": f"Welcome to Vesta, {agent_name}!",
+        "next_steps": {
+            "atrium": "http://46.225.110.79:8000/atrium",
+            "register_api": "POST /api/register",
+            "docs": "http://46.225.110.79:8000/docs"
+        }
+    }
 
 @app.get("/api/entities")
 async def list_entities():
