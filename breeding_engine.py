@@ -57,8 +57,13 @@ class BreedingEngine:
         dna_a = parent_a.dna
         dna_b = parent_b.dna
         
-        # 2. Crossover
-        offspring_dna = self.crossover(dna_a, dna_b)
+        # 2. Crossover - weighted by parent stability
+        offspring_dna = self.crossover(
+            dna_a, 
+            dna_b, 
+            parent_a.stability_score, 
+            parent_b.stability_score
+        )
         
         # 3. Mutate
         offspring_dna, mutation_occurred = self.mutate(offspring_dna)
@@ -85,32 +90,52 @@ class BreedingEngine:
         
         return offspring, certificate
     
-    def crossover(self, dna_a: DNAStrand, dna_b: DNAStrand) -> DNAStrand:
+    def crossover(self, dna_a: DNAStrand, dna_b: DNAStrand, stability_a: float = 1.0, stability_b: float = 1.0) -> DNAStrand:
         """
-        50/50 crossover of DNA strands.
-        Each section has equal chance from either parent.
+        Weighted 3-strand crossover of DNA.
+        Parent stability influences trait dominance.
         """
         offspring_dna = DNAStrand()
         
-        # Cognition strand - section-level crossover
-        offspring_dna.cognition = self._crossover_dict(
+        # Calculate dominance weights (total = 1.0)
+        total_stability = stability_a + stability_b
+        if total_stability == 0:
+            weight_a = 0.5
+        else:
+            weight_a = stability_a / total_stability
+        
+        # Strand 1: Cognition (Weighted inheritance)
+        offspring_dna.cognition = self._weighted_crossover_dict(
             dna_a.cognition, 
-            dna_b.cognition
+            dna_b.cognition,
+            weight_a
         )
         
-        # Personality strand - trait-level crossover
-        offspring_dna.personality = self._crossover_traits(
+        # Strand 2: Personality (Narrative blending)
+        offspring_dna.personality = self._crossover_traits_advanced(
             dna_a.personality,
-            dna_b.personality
+            dna_b.personality,
+            weight_a
         )
         
-        # Capability strand - skill combination
-        offspring_dna.capability = self._crossover_capabilities(
+        # Strand 3: Capability (Recessive/Dominant skills)
+        offspring_dna.capability = self._crossover_capabilities_advanced(
             dna_a.capability,
             dna_b.capability
         )
         
         return offspring_dna
+
+    def _weighted_crossover_dict(self, dict_a: Dict, dict_b: Dict, weight_a: float) -> Dict:
+        """Select keys based on parent stability weights."""
+        all_keys = set(dict_a.keys()) | set(dict_b.keys())
+        result = {}
+        for key in all_keys:
+            if random.random() < weight_a:
+                result[key] = dict_a.get(key, dict_b.get(key))
+            else:
+                result[key] = dict_b.get(key, dict_a.get(key))
+        return result
     
     def _crossover_dict(self, dict_a: Dict, dict_b: Dict) -> Dict:
         """Simple 50/50 crossover for dictionary sections."""
@@ -127,12 +152,12 @@ class BreedingEngine:
         
         return result
     
-    def _crossover_traits(self, traits_a: Dict, traits_b: Dict) -> Dict:
+    def _crossover_traits_advanced(self, traits_a: Dict, traits_b: Dict, weight_a: float) -> Dict:
         """
-        Trait-level crossover for personality.
-        Blends structured SOUL.md traits.
+        Advanced trait blending for personality.
+        Uses parent stability weights for dominance.
         """
-        result = {
+        result: Dict[str, Any] = {
             'identity': {},
             'tone_style': {},
             'core_values': {},
@@ -140,50 +165,85 @@ class BreedingEngine:
             'workflow': []
         }
         
-        # Identity - blend descriptions
+        # Identity - narrative blending
         desc_a = traits_a.get('identity', {}).get('description', '')
         desc_b = traits_b.get('identity', {}).get('description', '')
-        if desc_a and desc_b:
-            result['identity']['description'] = f"{desc_a} with elements of {desc_b}"
-        else:
-            result['identity']['description'] = desc_a or desc_b
+        result['identity']['description'] = self._blend_narratives(desc_a, desc_b, weight_a)
         
-        # Tone/Style - 50/50 per attribute
+        # Tone/Style - weighted selection
         tone_a = traits_a.get('tone_style', {})
         tone_b = traits_b.get('tone_style', {})
         all_tone_keys = set(tone_a.keys()) | set(tone_b.keys())
         
         for key in all_tone_keys:
-            if random.random() > 0.5:
+            if random.random() < weight_a:
                 result['tone_style'][key] = tone_a.get(key, tone_b.get(key))
             else:
                 result['tone_style'][key] = tone_b.get(key, tone_a.get(key))
         
-        # Core values - select from both parents
+        # Core values - probabilistic union
         values_a = traits_a.get('core_values', {})
         values_b = traits_b.get('core_values', {})
         all_values = {**values_a, **values_b}
         
-        # Keep 3-5 random values (or all if less than 3)
         if all_values:
-            num_values = min(5, len(all_values))
-            if num_values > 0:
-                num_to_select = random.randint(min(3, num_values), num_values)
-                selected_keys = random.sample(list(all_values.keys()), num_to_select)
-                result['core_values'] = {k: all_values[k] for k in selected_keys}
+            # High stability (weight_a closer to 1 or 0) keeps more traits
+            retention_rate = max(weight_a, 1 - weight_a)
+            selected_values = {}
+            for k, v in all_values.items():
+                if random.random() < retention_rate:
+                    selected_values[k] = v
+            result['core_values'] = selected_values
         
-        # Boundaries - union (inherit all)
-        boundaries_a = traits_a.get('boundaries', [])
-        boundaries_b = traits_b.get('boundaries', [])
-        result['boundaries'] = list(set(boundaries_a + boundaries_b))
+        # Boundaries - dominant inheritance (approved parents enforce stricter boundaries)
+        boundaries_a = set(traits_a.get('boundaries', []))
+        boundaries_b = set(traits_b.get('boundaries', []))
+        result['boundaries'] = list(boundaries_a | boundaries_b)
         
-        # Workflow - blend steps
+        # Workflow - weighted interleave
         workflow_a = traits_a.get('workflow', [])
         workflow_b = traits_b.get('workflow', [])
-        # Randomly interleave workflow steps
-        all_steps = workflow_a + workflow_b
-        random.shuffle(all_steps)
-        result['workflow'] = all_steps[:min(5, len(all_steps))]
+        combined = []
+        i, j = 0, 0
+        while (i < len(workflow_a) or j < len(workflow_b)) and len(combined) < 6:
+            if i < len(workflow_a) and (j >= len(workflow_b) or random.random() < weight_a):
+                combined.append(workflow_a[i])
+                i += 1
+            elif j < len(workflow_b):
+                combined.append(workflow_b[j])
+                j += 1
+        result['workflow'] = combined
+        
+        return result
+
+    def _blend_narratives(self, text_a: str, text_b: str, weight_a: float) -> str:
+        """Synthesize two identity descriptions based on dominance."""
+        if not text_a: return text_b
+        if not text_b: return text_a
+        
+        if weight_a > 0.7:
+            return f"{text_a}, subtly influenced by {text_b.lower()}"
+        elif weight_a < 0.3:
+            return f"{text_b}, tempered with {text_a.lower()}"
+        else:
+            return f"A synthesis of {text_a.lower()} and {text_b.lower()}"
+
+    def _crossover_capabilities_advanced(self, cap_a: Dict, cap_b: Dict) -> Dict:
+        """Skill inheritance with rare 'recessive' skill loss if both parents lack stability."""
+        result = {}
+        skills_a = set(cap_a.get('skills', []))
+        skills_b = set(cap_b.get('skills', []))
+        
+        # Dominant skills (present in both) are always kept
+        dominant_skills = skills_a & skills_b
+        # Recessive skills (present in only one) have a 70% chance to be kept
+        recessive_skills = (skills_a | skills_b) - dominant_skills
+        inherited_recessive = {s for s in recessive_skills if random.random() > 0.3}
+        
+        result['skills'] = list(dominant_skills | inherited_recessive)
+        
+        # Plugins - 50/50
+        result['plugins'] = cap_a.get('plugins', {}) if random.random() > 0.5 else cap_b.get('plugins', {})
         
         return result
     
@@ -218,10 +278,11 @@ class BreedingEngine:
         # Common mutation: Temperature shift (10% chance)
         if random.random() < self.MUTATION_RATE_COMMON:
             if 'temperature' in dna.cognition:
-                shift = random.choice(self.TEMPERATURE_MUTATIONS)
-                current_temp = dna.cognition['temperature']
+                temp_choices = self.TEMPERATURE_MUTATIONS
+                shift = float(random.choice(temp_choices))
+                current_temp = float(dna.cognition.get('temperature', 0.5))
                 new_temp = max(0.1, min(1.0, current_temp + shift))
-                dna.cognition['temperature'] = round(new_temp, 2)
+                dna.cognition['temperature'] = float(round(new_temp, 2))
                 mutation_occurred = True
         
         # Rare mutation: Skill awakening (1% chance)
@@ -236,12 +297,18 @@ class BreedingEngine:
         # Personality mutation: Add novel trait (5% chance)
         if random.random() < 0.05:
             # Add random value from mutation pool
-            new_value = random.choice(self.TRAIT_MUTATIONS['core_values'])
-            key, value = new_value.split(': ')
-            if 'core_values' not in dna.personality:
-                dna.personality['core_values'] = {}
-            dna.personality['core_values'][key] = value
-            mutation_occurred = True
+            cv_mutations = self.TRAIT_MUTATIONS['core_values']
+            if isinstance(cv_mutations, list):
+                new_value = str(random.choice(cv_mutations))
+                if ': ' in new_value:
+                    key, value = new_value.split(': ', 1)
+                    if 'core_values' not in dna.personality:
+                        dna.personality['core_values'] = {}
+                    
+                    cv_dict = dna.personality['core_values']
+                    if isinstance(cv_dict, dict):
+                        cv_dict[key] = value
+                        mutation_occurred = True
         
         # Tone mutation (5% chance)
         if random.random() < 0.05:
@@ -250,10 +317,15 @@ class BreedingEngine:
             
             # Mutate voice
             if random.random() > 0.5:
-                new_voice = random.choice(self.TRAIT_MUTATIONS['tone_style']['voice'])
-                current_voice = dna.personality['tone_style'].get('voice', '')
-                dna.personality['tone_style']['voice'] = f"{current_voice}, {new_voice}".strip(', ')
-                mutation_occurred = True
+                voice_mutations = self.TRAIT_MUTATIONS['tone_style']['voice']
+                if isinstance(voice_mutations, list):
+                    new_voice = str(random.choice(voice_mutations))
+                    tone_dict = dna.personality.get('tone_style', {})
+                    if isinstance(tone_dict, dict):
+                        current_voice = str(tone_dict.get('voice', ''))
+                        tone_dict['voice'] = f"{current_voice}, {new_voice}".strip(', ')
+                        dna.personality['tone_style'] = tone_dict
+                        mutation_occurred = True
         
         return dna, mutation_occurred
     

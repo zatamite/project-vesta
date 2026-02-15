@@ -2,7 +2,7 @@
 The Vestibule - Wellness & Safety System
 Three-layer validation: text analysis, compatibility, runtime monitoring.
 """
-from typing import Tuple, Dict, List, Optional
+from typing import Tuple, Dict, List, Optional, Any
 from datetime import datetime
 import re
 
@@ -12,10 +12,43 @@ from models import VestaEntity, CompatibilityReport, QuarantineRecord
 class StabilityChecker:
     """
     Layer 1: Text-based stability analysis.
-    Repetition ratio check from legacy wellness logic.
+    Repetition ratio check and sequence loop detection.
     """
     
     STABILITY_THRESHOLD = 0.4  # ThreeToe standard
+    LOOP_MIN_NGRAM = 3         # Minimum words in a repeating sequence
+    LOOP_MAX_NGRAM = 6         # Maximum words in a repeating sequence
+    LOOP_THRESHOLD = 3         # Number of repetitions to trigger warning
+    
+    def detect_loops(self, text: str) -> List[Dict[str, Any]]:
+        """
+        Detect repeating n-gram sequences (semantic loops).
+        Example: "error error error" or "I am help. I am help. I am help."
+        """
+        words = text.lower().split()
+        loops = []
+        
+        if len(words) < self.LOOP_MIN_NGRAM:
+            return loops
+            
+        for n in range(self.LOOP_MIN_NGRAM, min(self.LOOP_MAX_NGRAM + 1, len(words) // 2 + 1)):
+            ngrams: Dict[str, int] = {}
+            for i in range(len(words) - n + 1):
+                ngram_slice = words[i:i+n]
+                ngram = " ".join(ngram_slice)
+                ngrams[ngram] = ngrams.get(ngram, 0) + 1
+            
+            # Find sequences that repeat too many times
+            for ngram, count in ngrams.items():
+                if count >= self.LOOP_THRESHOLD:
+                    loops.append({
+                        "sequence": ngram,
+                        "count": count,
+                        "length": n
+                    })
+        
+        # Sort by length (longer loops are more significant)
+        return sorted(loops, key=lambda x: x['length'], reverse=True)
     
     def evaluate_stability(self, text_sample: str) -> Tuple[bool, float, str]:
         """
@@ -37,12 +70,29 @@ class StabilityChecker:
         total_words = len(words)
         ratio = unique_words / total_words
         
-        is_stable = ratio > self.STABILITY_THRESHOLD
+        # Detect semantic loops
+        loops = self.detect_loops(text_sample)
+        loop_penalty = 0.0
+        if loops:
+            # Penalty scales with loop count and length
+            # A single long loop (6 words, 3 hits) = 0.3 penalty
+            # A short loop (3 words, 4 hits) = 0.2 penalty
+            max_loop = loops[0]
+            loop_penalty = min(0.5, (max_loop['length'] * max_loop['count']) / 40.0)
+        
+        effective_stability = ratio - loop_penalty
+        is_stable = effective_stability > self.STABILITY_THRESHOLD
         
         if is_stable:
-            reason = f"Stable: {ratio:.2f} diversity ratio"
+            if loops:
+                reason = f"Stable: {ratio:.2f} ratio (partial loops detected: {loops[0]['sequence']})"
+            else:
+                reason = f"Stable: {ratio:.2f} diversity ratio"
         else:
-            reason = f"Unstable: {ratio:.2f} diversity ratio (threshold: {self.STABILITY_THRESHOLD})"
+            if loops:
+                reason = f"Unstable: Semantic loops detected ('{loops[0]['sequence']}'). Effective stability: {effective_stability:.2f}"
+            else:
+                reason = f"Unstable: {ratio:.2f} diversity ratio (threshold: {self.STABILITY_THRESHOLD})"
         
         return is_stable, ratio, reason
     
