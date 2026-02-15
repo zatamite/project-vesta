@@ -219,10 +219,19 @@ class HabitatDatabase:
                 limit=1000
             )
             
-            recent_plays = len([
-                i for i in recent_interactions
-                if datetime.fromisoformat(i.get("timestamp", "2020-01-01")) > week_ago
-            ])
+            recent_plays = 0
+            for i in recent_interactions:
+                ts_str = i.get("timestamp")
+                if not ts_str:
+                    continue
+                try:
+                    ts = datetime.fromisoformat(ts_str)
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    if ts > week_ago:
+                        recent_plays += 1
+                except:
+                    continue
             
             # Trending score
             age_days = (now - exp.created_at).days + 1

@@ -75,7 +75,7 @@ class ArrivalLog(BaseModel):
     entity_id: str
     activity_type: Literal[
         "Arrival", "Departure", "Hub_Change", "Breeding_Started",
-        "Breeding_Completed", "Evolution", "Quarantine", "Soul_Swap", "Mutation"
+        "Breeding_Completed", "Evolution", "Quarantine", "Soul_Swap", "Mutation", "Beacon_Requested"
     ]
     location: str
     details: Optional[Dict[str, Any]] = None

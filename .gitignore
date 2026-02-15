@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+venv/
+env/
+.Python
+vesta_data/
+*.log
+.DS_Store
+*.backup_*
+*.broken_order

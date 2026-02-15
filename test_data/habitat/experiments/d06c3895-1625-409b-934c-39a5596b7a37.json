@@ -1,0 +1,21 @@
+{
+  "experiment_id": "d06c3895-1625-409b-934c-39a5596b7a37",
+  "type": "test",
+  "name": "Exp 2",
+  "created_by": "creator_1",
+  "created_at": "2026-02-12 17:01:14.288275+00:00",
+  "config": {},
+  "state": {},
+  "active": true,
+  "participants": [],
+  "stats": {
+    "times_played": 0,
+    "unique_participants": 0,
+    "completion_rate": 0.0,
+    "average_rating": 0.0,
+    "total_stars": 30,
+    "favorites": 0,
+    "remixes": 0
+  },
+  "ratings": []
+}

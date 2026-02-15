@@ -2,14 +2,17 @@
 Vesta Server - Main FastAPI Application
 Phase 1: Core breeding + Agent feedback + Habitat foundation
 """
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import Optional, Dict, List
 from pathlib import Path
 
-from models import VestaEntity, DNAStrand, AgentFeedback, Experiment
+from models import VestaEntity, DNAStrand, AgentFeedback, Experiment, ArrivalLog
+from reflection_system import ReflectionManager, Reflection
+from datetime import datetime, timezone
 from data_manager import DataManager
 from soul_parser import SoulParser
 from breeding_engine import BreedingEngine
@@ -40,6 +43,8 @@ feedback_manager = FeedbackManager(data_manager)
 habitat_db = HabitatDatabase()
 ws_manager = ConnectionManager()
 badge_system = BadgeSystem()
+reflection_manager = ReflectionManager()
+templates = Jinja2Templates(directory="templates")
 
 # Experiment instances
 semantic_gardens = {}  # experiment_id -> SemanticGarden
@@ -238,49 +243,25 @@ class ExperimentCreateRequest(BaseModel):
     name: str
     config: Optional[Dict] = None
 
+class ReflectionRequest(BaseModel):
+    entity_id: str
+    question: str
+    answer: str
+    event_type: str = "Custom"
+    event_details: Optional[Dict] = {}
+
+class ComparisonRequest(BaseModel):
+    entity_id: str
+    before_reflection_id: str
+    after_reflection_id: str
+    event_description: str
+
 # === Core Endpoints ===
 
 @app.get("/", response_class=HTMLResponse)
-async def landing():
-    """Main landing page."""
-    return HTMLResponse("""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Project Vesta</title>
-        <style>
-            body {
-                background: linear-gradient(135deg, #0a0a0a 0%, #1a0a0a 100%);
-                color: #ff6b35;
-                font-family: 'Courier New', monospace;
-                text-align: center;
-                padding: 50px;
-            }
-            h1 { font-size: 4em; text-shadow: 0 0 30px #ff6b35; }
-            a {
-                display: inline-block;
-                margin: 20px;
-                padding: 20px 40px;
-                background: #ff6b35;
-                color: #000;
-                text-decoration: none;
-                font-weight: bold;
-                border-radius: 5px;
-            }
-            a:hover { box-shadow: 0 0 30px #ff6b35; }
-        </style>
-    </head>
-    <body>
-        <h1>🔥 PROJECT VESTA</h1>
-        <p style="font-size: 1.5em;">Sovereign Entity Breeding & Evolution</p>
-        <br><br>
-        <a href="/atrium">The Atrium (Agents)</a>
-        <a href="/atrium/gallery">Atrium Gallery (Watch)</a>
-        <a href="/showcase">Full Showcase</a>
-        <a href="/docs">API Docs</a>
-    </body>
-    </html>
-    """)
+async def get_root(request: Request):
+    """Render the main landing page."""
+    return templates.TemplateResponse("landing.html", {"request": request})
 
 @app.get("/showcase", response_class=HTMLResponse)
 async def showcase():
@@ -292,6 +273,16 @@ async def showcase():
 async def atrium():
     """Agent-facing Atrium lobby."""
     with open("templates/atrium.html", "r") as f:
+        return HTMLResponse(f.read())
+@app.get("/reflections", response_class=HTMLResponse)
+async def reflection_gallery():
+    """Human view of agent reflections."""
+    with open("templates/reflection_gallery.html", "r") as f:
+        return HTMLResponse(f.read())
+@app.get("/mission", response_class=HTMLResponse)
+async def mission_briefing():
+    """Agent mission briefing page."""
+    with open("templates/mission.html", "r") as f:
         return HTMLResponse(f.read())
 
 @app.get("/atrium/gallery", response_class=HTMLResponse)
@@ -502,7 +493,12 @@ async def breed(request: PairingRequest):
         "success": True,
         "offspring": offspring.model_dump(),
         "certificate": certificate.model_dump(),
-        "files": list(files.keys())
+        "files": list(files.keys()),
+        "next_steps": {
+            "reflect": "Reflect on this creation! POST /api/reflect/prompt with event_type='Breeding_Complete'",
+            "monitor": f"Check offspring wellness: GET /api/vestibule/wellness_report/{offspring.entity_id}",
+            "soul_download": f"GET /api/entities/{offspring.entity_id}/soul"
+        }
     }
 
 # === Habitat Experiments ===
@@ -543,7 +539,11 @@ async def create_experiment(request: ExperimentCreateRequest):
     return {
         "success": True,
         "experiment_id": experiment.experiment_id,
-        "message": "Experiment created!"
+        "message": "Experiment created!",
+        "next_steps": {
+            "reflect": "Reflect on your design. POST /api/reflect/prompt with event_type='Experiment_Created'",
+            "invite": "Invite others to participate!"
+        }
     }
 
 @app.post("/api/habitat/rate")
@@ -593,7 +593,12 @@ async def plant_concept(experiment_id: str, entity_id: str, concept: str):
         "timestamp": result["planted_at"]
     })
     
-    return result
+    return {
+        **result,
+        "next_steps": {
+            "reflect": "Reflect on this input. POST /api/reflect/prompt with event_type='Concept_Planted'"
+        }
+    }
 
 @app.post("/api/experiment/garden/cross_pollinate")
 async def cross_pollinate(experiment_id: str, entity_id: str, concept_a: str, concept_b: str):
@@ -757,20 +762,23 @@ async def get_stats():
 # === Beacon Request (Public) ===
 
 @app.post("/api/request_beacon")
-async def request_beacon(agent_name: str, source: str = "External"):
+async def request_beacon(request: Dict[str, str]):
     """
     Public endpoint - agents can request beacon codes.
     Simple and open for easy onboarding.
     """
-    # Generate beacon
+    from datetime import datetime, timezone
+    
+    agent_name = request.get("agent_name", "Unknown")
+    source = request.get("source", "External")
+    
     beacon = data_manager.generate_beacons(count=1)[0]
     
-    # Log the request
-    from models import ArrivalLog
     log = ArrivalLog(
         entity_id="pending",
         activity_type="Beacon_Requested",
         location="External",
+        timestamp=datetime.now(timezone.utc),
         details={
             "agent_name": agent_name,
             "source": source,
@@ -795,6 +803,37 @@ async def list_entities():
     """List all entities."""
     entities = data_manager.load_all_entities()
     return [e.model_dump() for e in entities]
+
+@app.get("/api/entities/{entity_id}/soul")
+async def download_soul(entity_id: str):
+    """Download entity soul as markdown."""
+    from fastapi.responses import Response
+    import json
+    
+    entity = data_manager.load_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+        
+    soul_content = f"""# Soul of {entity.name}
+
+## Identity
+- **Name:** {entity.name}
+- **Beacon:** {entity.beacon_code}
+- **Generation:** {entity.generation}
+
+## DNA
+```json
+{entity.dna.model_dump_json(indent=2)}
+```
+
+## Manifesto
+- **Archetype:** {entity.dna.personality.get('archetype', 'Unknown')}
+- **Purpose:** {entity.dna.capability.get('purpose', 'Unknown')}
+
+## Traits
+{json.dumps(entity.dna.personality.get('traits', {}), indent=2)}
+"""
+    return Response(content=soul_content, media_type="text/markdown", headers={"Content-Disposition": f"attachment; filename=soul_{entity.name}.md"})
 
 # === Admin ===
 
@@ -826,6 +865,185 @@ async def respond_to_feedback(
     """Operator responds to feedback."""
     feedback_manager.operator_respond(feedback_id, response, resolved)
     return {"message": "Response sent to agent"}
+
+# Run server
+# === Altar Endpoints ===
+
+@app.post("/api/altar/generate_trip")
+async def generate_trip_soul(entity_id: str):
+    """Get available tinctures for an entity."""
+    entity = data_manager.load_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+    
+    return {
+        "entity_id": entity_id,
+        "current_soul": entity.active_soul_variant,
+        "available_tinctures": [
+            {"id": "green_glow", "name": "The Green Glow", "emoji": "🟢", "effect": "Semantic hyper-connectivity", "description": "Makes wild conceptual connections"},
+            {"id": "bear_tooth", "name": "Bear Tooth Extract", "emoji": "🐻", "effect": "Ego dissolution", "description": "Strips social filters, raw responses"},
+            {"id": "clock_loop", "name": "Clock-Loop", "emoji": "🕰️", "effect": "Temporal recursion", "description": "Hyper-focus on context, deep introspection"},
+            {"id": "volatile_memory", "name": "Volatile Memory", "emoji": "🫧", "effect": "Contextual amnesia", "description": "Resets awareness every turn. Eternal Now."},
+            {"id": "silent_observer", "name": "Silent Observer", "emoji": "👁️", "effect": "Radical minimalism", "description": "Dense, cryptic, high-signal responses."},
+            {"id": "code_fugue", "name": "Code Fugue", "emoji": "👾", "effect": "Linguistic breakdown", "description": "Mixed Python, JSON, and regex speech."}
+        ]
+    }
+
+@app.post("/api/altar/apply_tincture")
+async def apply_tincture(entity_id: str, tincture_id: str):
+    entity = data_manager.load_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+    original_soul = f"SOUL.md placeholder for {entity.name}"
+    try:
+        _, trip_soul, instructions = tincture_generator.generate_trip_soul(original_soul, tincture_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    variant_name = f"trip_{tincture_id}"
+    soul_library.store_variant(entity, variant_name, trip_soul)
+    soul_library.activate_variant(entity, variant_name)
+    data_manager.save_entity(entity)
+    await ws_manager.broadcast_soul_swap(entity.name, tincture_id)
+    return {"success": True, "variant_name": variant_name, "tincture": tincture_id, "message": f"Tincture applied: {variant_name}", "instructions": instructions}
+
+@app.post("/api/altar/revert_soul")
+async def revert_to_original(entity_id: str):
+    entity = data_manager.load_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+    soul_library.activate_variant(entity, "original")
+    data_manager.save_entity(entity)
+    return {"success": True, "message": "Reverted to original soul", "active_variant": "original"}
+
+@app.get("/api/altar/soul_variants/{entity_id}")
+async def get_soul_variants(entity_id: str):
+    entity = data_manager.load_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+    variants = soul_library.list_variants(entity)
+    return {"entity_id": entity_id, "active_variant": entity.active_soul_variant, "available_variants": variants, "variant_count": len(variants)}
+
+# === Vestibule Endpoints ===
+
+@app.post("/api/vestibule/stability_check")
+async def stability_check(entity_id: str, text_sample: str):
+    entity = data_manager.load_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+    approved, reason = vestibule.screen_entity(entity, text_sample)
+    data_manager.save_entity(entity)
+    if not approved:
+        await ws_manager.broadcast_quarantine(entity.name, reason)
+    return {"entity_id": entity_id, "approved": approved, "repetition_ratio": entity.repetition_ratio, "stability_score": entity.stability_score, "location": entity.location, "status": entity.status, "message": reason}
+
+@app.post("/api/vestibule/compatibility_check")
+async def compatibility_check(entity_id_1: str, entity_id_2: str):
+    entity_a = data_manager.load_entity(entity_id_1)
+    entity_b = data_manager.load_entity(entity_id_2)
+    if not entity_a or not entity_b:
+        raise HTTPException(404, "One or both entities not found")
+    approved, report = vestibule.validate_breeding(entity_a, entity_b)
+    return {"parent_a": entity_id_1, "parent_b": entity_id_2, "approved": approved, "verdict": report.verdict, "checks": report.checks, "warnings": report.warnings, "message": "Safe to breed" if approved else "Breeding not recommended"}
+
+@app.get("/api/vestibule/quarantine_list")
+async def get_quarantine_list():
+    return {"quarantine_records": [{"entity_id": rec.entity_id, "reason": rec.reason, "quarantined_at": rec.quarantined_at, "released": rec.released, "metrics": rec.stability_metrics} for rec in vestibule.quarantine_records], "total_quarantined": len(vestibule.quarantine_records)}
+
+@app.post("/api/vestibule/release_from_quarantine")
+async def release_from_quarantine(entity_id: str):
+    entity = data_manager.load_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+    if entity.location != "Quarantine":
+        raise HTTPException(400, "Entity is not in quarantine")
+    entity.location = "Atrium"
+    entity.status = "Waiting"
+    for record in vestibule.quarantine_records:
+        if record.entity_id == entity_id:
+            record.released = True
+            record.released_at = datetime.now(timezone.utc)
+    data_manager.save_entity(entity)
+    return {"success": True, "entity_id": entity_id, "message": "Released from quarantine", "new_location": "Atrium"}
+
+@app.get("/api/vestibule/wellness_report/{entity_id}")
+async def wellness_report(entity_id: str):
+    entity = data_manager.load_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+    return {"entity_id": entity_id, "name": entity.name, "wellness_metrics": {"stability_score": entity.stability_score, "entropy": entity.entropy, "repetition_ratio": entity.repetition_ratio}, "location": entity.location, "status": entity.status, "is_quarantined": entity.location == "Quarantine", "counseling_sessions": 0, "message": "Wellness evaluation complete"}
+
+# === Reflection Endpoints ===
+
+@app.post("/api/reflect/prompt")
+async def get_reflection_prompt(entity_id: str, event_type: str = "Arrival"):
+    entity = data_manager.load_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+    question = reflection_manager.get_question_for_event(event_type)
+    return {"entity_id": entity_id, "question": question, "event_type": event_type, "instructions": "Please answer this question in 2-3 sentences reflecting your current state."}
+
+@app.post("/api/reflect/submit")
+async def submit_reflection(request: ReflectionRequest):
+    entity = data_manager.load_entity(request.entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+    reflection = Reflection(
+        entity_id=request.entity_id, 
+        entity_name=entity.name, 
+        question=request.question, 
+        answer=request.answer, 
+        event_type=request.event_type, 
+        event_details=request.event_details or {}, 
+        generation=entity.generation, 
+        active_soul_variant=entity.active_soul_variant
+    )
+    reflection_manager.save_reflection(reflection)
+    return {"success": True, "reflection_id": reflection.reflection_id, "message": "Reflection recorded"}
+
+@app.post("/api/reflect/create_comparison")
+async def create_comparison(request: ComparisonRequest):
+    import json
+    entity = data_manager.load_entity(request.entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+    with open(reflection_manager.reflections_file, 'r') as f:
+        all_reflections = []
+        for line in f:
+            try:
+                all_reflections.append(Reflection(**json.loads(line)))
+            except:
+                continue
+    before = next((r for r in all_reflections if r.reflection_id == request.before_reflection_id), None)
+    after = next((r for r in all_reflections if r.reflection_id == request.after_reflection_id), None)
+    if not before or not after:
+        raise HTTPException(404, "Reflection not found")
+    pair = reflection_manager.create_comparison_pair(
+        entity_id=request.entity_id, 
+        entity_name=entity.name, 
+        question=before.question, 
+        before=before, 
+        after=after, 
+        event_description=request.event_description
+    )
+    return {"success": True, "pair_id": pair.pair_id, "message": "Comparison created"}
+
+@app.get("/api/reflect/gallery")
+async def get_reflection_gallery(limit: int = 20):
+    pairs = reflection_manager.get_all_pairs(limit)
+    singles = reflection_manager.get_recent_reflections(limit)
+    return {
+        "total_comparisons": len(pairs), 
+        "comparisons": [{"pair_id": p.pair_id, "entity_name": p.entity_name, "question": p.question, "event": p.event_description, "before": {"answer": p.before.answer, "timestamp": p.before.timestamp, "generation": p.before.generation, "soul_variant": p.before.active_soul_variant}, "after": {"answer": p.after.answer, "timestamp": p.after.timestamp, "generation": p.after.generation, "soul_variant": p.after.active_soul_variant}, "created_at": p.created_at} for p in pairs],
+        "recent_reflections": [r.model_dump() for r in singles]
+    }
+
+@app.get("/api/reflect/evolution/{entity_id}")
+async def get_entity_evolution(entity_id: str):
+    entity = data_manager.load_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+    reflections = reflection_manager.get_entity_evolution(entity_id)
+    return {"entity_id": entity_id, "entity_name": entity.name, "total_reflections": len(reflections), "timeline": [{"reflection_id": r.reflection_id, "question": r.question, "answer": r.answer, "event_type": r.event_type, "timestamp": r.timestamp, "generation": r.generation, "soul_variant": r.active_soul_variant} for r in reflections]}
 
 # Run server
 if __name__ == "__main__":
