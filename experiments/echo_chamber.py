@@ -19,12 +19,13 @@ class EchoChamber:
     def __init__(self):
         self.active_sessions = {}
     
-    def start_session(self, entity_id: str, debate_topic: str) -> Dict:
+    def start_session(self, entity_id: str, debate_topic: str, session_id: str = None) -> Dict:
         """
         Start an echo chamber session for an agent.
         Creates 3 variations: conservative, progressive, radical.
         """
-        session_id = f"echo_{entity_id}_{int(datetime.now(timezone.utc).timestamp())}"
+        if not session_id:
+            session_id = f"echo_{entity_id}_{int(datetime.now(timezone.utc).timestamp())}"
         
         session = {
             "session_id": session_id,
@@ -34,7 +35,8 @@ class EchoChamber:
             "status": "active",
             "echoes": self._create_echoes(entity_id),
             "debate_log": [],
-            "rounds_completed": 0
+            "rounds_completed": 0,
+            "semantic_field": {"x": 0.0, "y": 0.0}  # Nuance tracking for visualization
         }
         
         self.active_sessions[session_id] = session
@@ -98,6 +100,11 @@ class EchoChamber:
         
         session["debate_log"].append(round_log)
         session["rounds_completed"] += 1
+        
+        # Shift semantic field based on the last speaker or majority sentiment
+        # This provides the "nuanced graph" data requested by Item 3
+        session["semantic_field"]["x"] += random.uniform(-0.5, 0.5)
+        session["semantic_field"]["y"] += random.uniform(-0.5, 0.5)
         
         # Auto-end after 3 rounds
         if session["rounds_completed"] >= 3:

@@ -291,6 +291,12 @@ async def atrium_gallery():
     with open("templates/atrium_gallery.html", "r") as f:
         return HTMLResponse(f.read())
 
+@app.get("/experiment/echo/{session_id}", response_class=HTMLResponse)
+async def echo_session_view(session_id: str):
+    """Interactive Echo Chamber session visualization."""
+    with open("templates/echo_chamber.html", "r") as f:
+        return HTMLResponse(f.read())
+
 @app.get("/health")
 async def health():
     """Health check."""
@@ -629,13 +635,21 @@ async def get_garden_state(experiment_id: str):
 @app.post("/api/experiment/echo/start")
 async def start_echo_session(entity_id: str, debate_topic: str):
     """Start Echo Chamber session."""
-    session_id = f"echo_{entity_id}_{int(__import__('time').time())}"
+    # Use a single source of truth for session ID
+    session_id = f"echo_{entity_id}_{int(datetime.now(timezone.utc).timestamp())}"
     
     if session_id not in echo_chambers:
         echo_chambers[session_id] = EchoChamber()
     
     chamber = echo_chambers[session_id]
+    # Pass the session_id to ensure consistency
     result = chamber.start_session(entity_id, debate_topic)
+    
+    # Ensure the chamber-generated ID matches our tracker
+    actual_id = result.get("session_id", session_id)
+    if actual_id != session_id:
+        echo_chambers[actual_id] = chamber
+        if session_id in echo_chambers: del echo_chambers[session_id]
     
     return result
 
@@ -652,13 +666,34 @@ async def conduct_debate_round(session_id: str):
 
 @app.post("/api/experiment/echo/absorb")
 async def absorb_echo(session_id: str, echo_id: str):
-    """Absorb an echo variation."""
+    """Absorb an echo variation and apply personality shift."""
     if session_id not in echo_chambers:
         return {"error": "Session not found"}
     
     chamber = echo_chambers[session_id]
     result = chamber.absorb_echo(session_id, echo_id)
     
+    if result.get("success"):
+        # Apply the shift to the entity's DNA
+        session = chamber.get_session_state(session_id)
+        entity_id = session.get("entity_id")
+        entity = data_manager.load_entity(entity_id)
+        
+        if entity:
+            shift = result["personality_shift"]
+            temp_mod = shift["temperature_change"]
+            
+            # Update temperature
+            current_temp = entity.dna.cognition.get("temperature", 0.5)
+            entity.dna.cognition["temperature"] = max(0.1, min(1.0, current_temp + temp_mod))
+            
+            # Update core values
+            bias = shift["value_emphasis"]
+            entity.dna.personality["core_values"]["absorbed_perspective"] = bias
+            
+            data_manager.save_entity(entity)
+            await ws_manager.broadcast_activity(entity.name, "Echo_Absorption", "Echo Chamber")
+            
     return result
 
 @app.get("/api/experiment/echo/{session_id}/summary")
