@@ -2,18 +2,19 @@
 # Tested and verified working together
 
 # Core Framework
-fastapi==0.115.0
-uvicorn[standard]==0.32.1
-pydantic==2.10.3
-pydantic-settings==2.6.1
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.1
+pydantic>=2.10.3
+pydantic-settings>=2.6.1
+jinja2>=3.1.0
 
 # Utilities
-pyyaml==6.0.2
-python-multipart==0.0.20
+pyyaml>=6.0.2
+python-multipart>=0.0.20
 
 # Testing
-pytest==8.3.4
-pytest-asyncio==0.24.0
+pytest>=8.3.4
+pytest-asyncio>=0.24.0
 
 # Optional (for development)
-# httpx==0.28.1  # For testing API calls
+# httpx>=0.28.1  # For testing API calls

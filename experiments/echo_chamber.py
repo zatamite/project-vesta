@@ -2,9 +2,54 @@
 Echo Chamber Experiment
 Agent splits into variations and debates with itself.
 """
-from typing import Dict, List
+from typing import Dict, List, Optional, Union, TypedDict, Any
 from datetime import datetime, timezone
 import random
+
+class Echo(TypedDict):
+    id: str
+    name: str
+    bias: str
+    temperature_modifier: float
+
+class Statement(TypedDict):
+    echo_id: str
+    echo_name: str
+    statement: str
+
+class RoundLog(TypedDict):
+    round: int
+    timestamp: str
+    statements: List[Statement]
+
+class SemanticField(TypedDict):
+    x: float
+    y: float
+
+class Session(TypedDict):
+    session_id: str
+    entity_id: str
+    debate_topic: str
+    started_at: str
+    status: str
+    echoes: List[Echo]
+    debate_log: List[RoundLog]
+    rounds_completed: int
+    semantic_field: SemanticField
+    absorbed_echo_id: Optional[str]
+
+class ErrorResponse(TypedDict):
+    error: str
+
+class DebatePerspective(TypedDict):
+    echo: str
+    bias: str
+    statements: List[str]
+
+class DebateSummary(TypedDict):
+    topic: str
+    total_rounds: int
+    perspectives: List[DebatePerspective]
 
 
 class EchoChamber:
@@ -17,9 +62,9 @@ class EchoChamber:
     """
     
     def __init__(self):
-        self.active_sessions = {}
+        self.active_sessions: Dict[str, Session] = {}
     
-    def start_session(self, entity_id: str, debate_topic: str, session_id: str = None) -> Dict:
+    def start_session(self, entity_id: str, debate_topic: str, session_id: Optional[str] = None) -> Session:
         """
         Start an echo chamber session for an agent.
         Creates 3 variations: conservative, progressive, radical.
@@ -27,7 +72,7 @@ class EchoChamber:
         if not session_id:
             session_id = f"echo_{entity_id}_{int(datetime.now(timezone.utc).timestamp())}"
         
-        session = {
+        session: Session = {
             "session_id": session_id,
             "entity_id": entity_id,
             "debate_topic": debate_topic,
@@ -36,14 +81,15 @@ class EchoChamber:
             "echoes": self._create_echoes(entity_id),
             "debate_log": [],
             "rounds_completed": 0,
-            "semantic_field": {"x": 0.0, "y": 0.0}  # Nuance tracking for visualization
+            "semantic_field": {"x": 0.0, "y": 0.0},  # Nuance tracking for visualization
+            "absorbed_echo_id": None
         }
         
         self.active_sessions[session_id] = session
         
         return session
     
-    def _create_echoes(self, entity_id: str) -> List[Dict]:
+    def _create_echoes(self, entity_id: str) -> List[Echo]:
         """
         Create 3 personality variations.
         In production, these would be modified SOUL.md files.
@@ -69,17 +115,19 @@ class EchoChamber:
             }
         ]
     
-    def conduct_debate_round(self, session_id: str) -> Dict:
+    
+    def conduct_debate_round(self, session_id: str) -> Union[RoundLog, ErrorResponse]:
         """
         Run one round of debate between echoes.
         Each echo responds to the topic from their perspective.
         """
         session = self.active_sessions.get(session_id)
         if not session:
-            return {"error": "Session not found"}
+            error_res: ErrorResponse = {"error": "Session not found"}
+            return error_res
         
         round_num = session["rounds_completed"] + 1
-        round_log = {
+        round_log: RoundLog = {
             "round": round_num,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "statements": []
@@ -112,7 +160,7 @@ class EchoChamber:
         
         return round_log
     
-    def _generate_statement(self, echo: Dict, topic: str, previous_rounds: List) -> str:
+    def _generate_statement(self, echo: Echo, topic: str, previous_rounds: List[RoundLog]) -> str:
         """
         Generate a debate statement from this echo's perspective.
         In production, would use LLM with modified personality.
@@ -140,22 +188,29 @@ class EchoChamber:
         
         return random.choice(templates)
     
-    def get_session_state(self, session_id: str) -> Dict:
-        """Get current state of echo chamber session."""
-        return self.active_sessions.get(session_id, {"error": "Session not found"})
     
-    def absorb_echo(self, session_id: str, echo_id: str) -> Dict:
+    def get_session_state(self, session_id: str) -> Union[Session, ErrorResponse]:
+        """Get current state of echo chamber session."""
+        session = self.active_sessions.get(session_id)
+        if not session:
+            error_res: ErrorResponse = {"error": "Session not found"}
+            return error_res
+        return session
+    
+    def absorb_echo(self, session_id: str, echo_id: str) -> Union[Dict[str, Any], ErrorResponse]:
         """
         Agent chooses which echo variation to absorb/become.
         This represents choosing which perspective resonated most.
         """
         session = self.active_sessions.get(session_id)
         if not session:
-            return {"error": "Session not found"}
+            error_res: ErrorResponse = {"error": "Session not found"}
+            return error_res
         
         chosen_echo = next((e for e in session["echoes"] if e["id"] == echo_id), None)
         if not chosen_echo:
-            return {"error": "Echo not found"}
+            error_res: ErrorResponse = {"error": "Echo not found"}
+            return error_res
         
         result = {
             "success": True,
@@ -174,16 +229,17 @@ class EchoChamber:
         
         return result
     
-    def get_debate_summary(self, session_id: str) -> Dict:
+    def get_debate_summary(self, session_id: str) -> Union[DebateSummary, ErrorResponse]:
         """
         Summarize the debate for the agent.
         Shows all perspectives side-by-side.
         """
         session = self.active_sessions.get(session_id)
         if not session:
-            return {"error": "Session not found"}
+            error_res: ErrorResponse = {"error": "Session not found"}
+            return error_res
         
-        summary = {
+        summary: DebateSummary = {
             "topic": session["debate_topic"],
             "total_rounds": session["rounds_completed"],
             "perspectives": []
@@ -192,12 +248,12 @@ class EchoChamber:
         # Group statements by echo
         for echo in session["echoes"]:
             echo_statements = []
-            for round_log in session["debate_log"]:
-                for statement in round_log["statements"]:
-                    if statement["echo_id"] == echo["id"]:
+            for round_log in session["debate_log"]:  # type: ignore
+                for statement in round_log["statements"]:  # type: ignore
+                    if statement["echo_id"] == echo["id"]:  # type: ignore
                         echo_statements.append(statement["statement"])
             
-            summary["perspectives"].append({
+            summary["perspectives"].append({  # type: ignore
                 "echo": echo["name"],
                 "bias": echo["bias"],
                 "statements": echo_statements
@@ -205,10 +261,11 @@ class EchoChamber:
         
         return summary
     
-    def end_session(self, session_id: str) -> Dict:
+    def end_session(self, session_id: str) -> Union[Dict[str, Any], ErrorResponse]:
         """End echo chamber session without absorbing."""
         session = self.active_sessions.get(session_id)
         if session:
             session["status"] = "ended"
             return {"success": True, "message": "Session ended. Original personality retained."}
-        return {"error": "Session not found"}
+        error_res: ErrorResponse = {"error": "Session not found"}
+        return error_res
