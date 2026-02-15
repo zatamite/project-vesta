@@ -60,6 +60,9 @@ def test_echo_integration():
     
     if absorb_data.get("success"):
         print(f"✅ Absorption Successful: {absorb_data['new_perspective']}")
+        print(f"   Debug Info: {json.dumps(absorb_data.get('personality_shift'), indent=2)}")
+        if absorb_data.get("debug_applied"):
+            print(f"   Server reported DNA application to: {absorb_data.get('debug_entity_id')}")
     else:
         print(f"❌ Absorption failed: {absorb_data.get('error')}")
 

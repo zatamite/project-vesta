@@ -683,17 +683,27 @@ async def absorb_echo(session_id: str, echo_id: str):
             shift = result["personality_shift"]
             temp_mod = shift["temperature_change"]
             
+            # Ensure DNA structure exists
+            if not entity.dna:
+                entity.dna = DNAStrand()
+            
             # Update temperature
             current_temp = entity.dna.cognition.get("temperature", 0.5)
             entity.dna.cognition["temperature"] = max(0.1, min(1.0, current_temp + temp_mod))
             
             # Update core values
+            if "core_values" not in entity.dna.personality:
+                entity.dna.personality["core_values"] = {}
+            
             bias = shift["value_emphasis"]
             entity.dna.personality["core_values"]["absorbed_perspective"] = bias
             
+            # Save and broadcast
             data_manager.save_entity(entity)
             await ws_manager.broadcast_activity(entity.name, "Echo_Absorption", "Echo Chamber")
-            
+            result["debug_applied"] = True
+            result["debug_entity_id"] = entity_id
+    
     return result
 
 @app.get("/api/experiment/echo/{session_id}/summary")
