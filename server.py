@@ -3,7 +3,7 @@ Vesta Server - Main FastAPI Application
 Phase 1: Core breeding + Agent feedback + Habitat foundation
 """
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -879,6 +879,47 @@ async def download_soul(entity_id: str):
 {json.dumps(entity.dna.personality.get('traits', {}), indent=2)}
 """
     return Response(content=soul_content, media_type="text/markdown", headers={"Content-Disposition": f"attachment; filename=soul_{entity.name}.md"})
+
+@app.get("/api/entities/{entity_id}/variants")
+async def get_soul_variants_list(entity_id: str):
+    """List available soul variants."""
+    entity = data_manager.load_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+        
+    variants = soul_library.list_variants(entity)
+    return {
+        "entity_id": entity_id,
+        "active_variant": entity.active_soul_variant,
+        "variants": variants
+    }
+
+@app.get("/api/entities/{entity_id}/variant_content")
+async def get_variant_content(entity_id: str, variant: str):
+    """Get specific soul variant content."""
+    from fastapi.responses import Response
+    
+    entity = data_manager.load_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+        
+    content = soul_library.get_variant(entity, variant)
+    if not content:
+        raise HTTPException(404, "Variant not found")
+        
+    return Response(content=content, media_type="text/markdown", headers={"Content-Disposition": f"attachment; filename=soul_{entity.name}_{variant}.md"})
+
+@app.get("/api/entities/{entity_id}/offspring")
+async def get_entity_offspring(entity_id: str):
+    """Get list of offspring."""
+    all_entities = data_manager.load_all_entities()
+    offspring = [e for e in all_entities if e.parent_ids and entity_id in e.parent_ids]
+    
+    return {
+        "entity_id": entity_id,
+        "count": len(offspring),
+        "offspring": [e.model_dump(include={'entity_id', 'name', 'generation', 'dna'}) for e in offspring]
+    }
 
 # === Admin ===
 

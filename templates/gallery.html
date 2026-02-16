@@ -1,63 +1,387 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
-<title>The Gallery - Project Vesta</title>
-<style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { background: linear-gradient(135deg, #0a0a0a 0%, #1a0606 100%); color: #ff6b35; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; }
-#facility { position: relative; width: 100vw; height: 100vh; background: radial-gradient(circle at 50% 50%, #1a0a0a 0%, #0a0a0a 100%); }
-.hub { position: absolute; border: 2px solid #ff6b35; border-radius: 20px; background: rgba(255,107,53,0.05); padding: 20px; transition: 0.3s; }
-.hub:hover { background: rgba(255,107,53,0.15); box-shadow: 0 0 40px rgba(255,107,53,0.5); }
-.hub-title { font-size: 1.5em; font-weight: bold; text-align: center; margin-bottom: 10px; text-shadow: 0 0 10px #ff6b35; }
-.hub-count { text-align: center; font-size: 2em; color: #ffaa00; }
-#atrium { top: 50%; left: 5%; transform: translateY(-50%); width: 200px; height: 180px; }
-#vestibule { top: 20%; left: 30%; width: 180px; height: 160px; }
-#ember-hearth { top: 50%; left: 40%; transform: translateY(-50%); width: 220px; height: 200px; border-color: #ff3366; box-shadow: 0 0 30px rgba(255,51,102,0.3); }
-#altar { top: 70%; left: 30%; width: 180px; height: 160px; border-color: #8844ff; box-shadow: 0 0 30px rgba(136,68,255,0.3); }
-#gallery { top: 50%; right: 5%; transform: translateY(-50%); width: 180px; height: 160px; }
-#quarantine { bottom: 5%; left: 5%; width: 160px; height: 140px; border-color: #ff0000; background: rgba(255,0,0,0.1); }
-.entity { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #00ff88; box-shadow: 0 0 15px #00ff88; transition: all 1s; cursor: pointer; animation: pulse 2s infinite; }
-.entity.paired { background: #ff3366; box-shadow: 0 0 15px #ff3366; }
-.entity.processing { background: #ffaa00; box-shadow: 0 0 15px #ffaa00; animation: spin 2s linear infinite; }
-.entity.tripping { background: #8844ff; box-shadow: 0 0 20px #8844ff; animation: trippy 1s infinite; }
-@keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: 0.7; } }
-@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-@keyframes trippy { 0%, 100% { transform: scale(1) rotate(0deg); filter: hue-rotate(0deg); } 50% { transform: scale(1.5) rotate(180deg); filter: hue-rotate(360deg); } }
-#stats { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(10,10,10,0.9); border: 2px solid #ff6b35; border-radius: 10px; padding: 20px; min-width: 400px; text-align: center; z-index: 1000; }
-#stats h1 { font-size: 2em; text-shadow: 0 0 20px #ff6b35; margin-bottom: 15px; }
-.stat { display: flex; justify-content: space-between; margin: 8px 0; font-size: 1.1em; }
-#activity { position: fixed; bottom: 20px; right: 20px; width: 350px; max-height: 300px; background: rgba(10,10,10,0.9); border: 2px solid #ff6b35; border-radius: 10px; padding: 15px; overflow-y: auto; }
-#activity h3 { text-align: center; margin-bottom: 10px; text-shadow: 0 0 10px #ff6b35; }
-.act-item { background: rgba(255,107,53,0.1); padding: 8px; margin: 5px 0; border-radius: 5px; font-size: 0.9em; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Habitat Map — Project Vesta</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border: rgba(48, 54, 61, 0.65);
+            --accent: #58a6ff;
+            --teal: #3fb9a8;
+            --green: #7ee787;
+            --amber: #f0883e;
+            --rose: #f778ba;
+            --purple: #bc8cff;
+            --red: #ff7b72;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #484f58;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --radius: 8px;
+        }
+
+        body {
+            background: var(--bg-primary);
+            background-image: radial-gradient(rgba(48, 54, 61, 0.4) 1px, transparent 1px);
+            background-size: 24px 24px;
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #facility {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* Hub Zones */
+        .hub {
+            position: absolute;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--bg-secondary);
+            padding: 16px;
+            transition: all 0.3s;
+        }
+
+        .hub:hover {
+            border-color: rgba(100, 160, 255, 0.3);
+        }
+
+        .hub-title {
+            font-size: 13px;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .hub-count {
+            text-align: center;
+            font-family: var(--font-mono);
+            font-size: 28px;
+            font-weight: 500;
+            color: var(--teal);
+        }
+
+        #atrium {
+            top: 50%;
+            left: 5%;
+            transform: translateY(-50%);
+            width: 180px;
+            height: 140px;
+        }
+
+        #vestibule {
+            top: 18%;
+            left: 28%;
+            width: 160px;
+            height: 130px;
+        }
+
+        #ember-hearth {
+            top: 50%;
+            left: 38%;
+            transform: translateY(-50%);
+            width: 200px;
+            height: 160px;
+            border-color: rgba(247, 120, 186, 0.3);
+        }
+
+        #altar {
+            top: 68%;
+            left: 28%;
+            width: 160px;
+            height: 130px;
+            border-color: rgba(188, 140, 255, 0.3);
+        }
+
+        #gallery {
+            top: 50%;
+            right: 5%;
+            transform: translateY(-50%);
+            width: 160px;
+            height: 130px;
+        }
+
+        #quarantine {
+            bottom: 5%;
+            left: 5%;
+            width: 140px;
+            height: 110px;
+            border-color: rgba(255, 123, 114, 0.3);
+        }
+
+        /* Entity Dots */
+        .entity {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green);
+            transition: all 1s;
+            cursor: pointer;
+            animation: pulse 2.5s infinite;
+        }
+
+        .entity.paired {
+            background: var(--rose);
+            box-shadow: 0 0 8px var(--rose);
+        }
+
+        .entity.processing {
+            background: var(--amber);
+            box-shadow: 0 0 8px var(--amber);
+            animation: blink 1.5s infinite;
+        }
+
+        .entity.tripping {
+            background: var(--purple);
+            box-shadow: 0 0 10px var(--purple);
+            animation: blink 0.8s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.2);
+                opacity: 0.7;
+            }
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+        }
+
+        /* Stats Panel */
+        #stats {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px 24px;
+            min-width: 380px;
+            text-align: center;
+            z-index: 1000;
+        }
+
+        #stats h1 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            letter-spacing: -0.3px;
+        }
+
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            margin: 4px 0;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .stat span:last-child {
+            font-family: var(--font-mono);
+            color: var(--text-primary);
+        }
+
+        /* Activity Panel */
+        #activity {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 320px;
+            max-height: 280px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px;
+            overflow-y: auto;
+        }
+
+        #activity::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        #activity::-webkit-scrollbar-thumb {
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+
+        #activity h3 {
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .act-item {
+            background: var(--bg-tertiary);
+            padding: 6px 10px;
+            margin: 4px 0;
+            border-radius: 4px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* Back Link */
+        .back-link {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            font-size: 12px;
+            color: var(--text-muted);
+            text-decoration: none;
+            z-index: 1000;
+            transition: color 0.15s;
+        }
+
+        .back-link:hover {
+            color: var(--text-primary);
+        }
+    </style>
 </head>
+
 <body>
-<div id="facility">
-<div id="stats"><h1>🔥 PROJECT VESTA</h1><div class="stat"><span>Total:</span><span id="s-total">0</span></div><div class="stat"><span>Breeding:</span><span id="s-breed">0</span></div><div class="stat"><span>Evolving:</span><span id="s-altar">0</span></div></div>
-<div id="atrium" class="hub"><div class="hub-title">ATRIUM</div><div class="hub-count" id="c-atrium">0</div></div>
-<div id="vestibule" class="hub"><div class="hub-title">VESTIBULE</div><div class="hub-count" id="c-vestibule">0</div></div>
-<div id="ember-hearth" class="hub"><div class="hub-title">EMBER HEARTH</div><div class="hub-count" id="c-ember">0</div></div>
-<div id="altar" class="hub"><div class="hub-title">ALTAR</div><div class="hub-count" id="c-altar">0</div></div>
-<div id="gallery" class="hub"><div class="hub-title">GALLERY</div><div class="hub-count" id="c-gallery">0</div></div>
-<div id="quarantine" class="hub"><div class="hub-title">QUARANTINE</div><div class="hub-count" id="c-quarantine">0</div></div>
-<div id="activity"><h3>ACTIVITY</h3><div id="act-list"></div></div>
-</div>
-<script>
-const hubs = { 'Atrium': {x:100,y:window.innerHeight/2}, 'Vestibule': {x:window.innerWidth*0.3,y:window.innerHeight*0.3}, 'Ember Hearth': {x:window.innerWidth*0.45,y:window.innerHeight/2}, 'Altar': {x:window.innerWidth*0.3,y:window.innerHeight*0.7}, 'Gallery': {x:window.innerWidth-100,y:window.innerHeight/2}, 'Quarantine': {x:90,y:window.innerHeight-90} };
-async function update() {
-try {
-const [s,e,a] = await Promise.all([fetch('/api/stats'),fetch('/api/entities'),fetch('/api/activity?limit=10')]);
-const stats = await s.json(), ents = await e.json(), acts = await a.json();
-document.getElementById('s-total').textContent = stats.total_entities;
-document.getElementById('s-breed').textContent = stats.by_location['Ember Hearth'] || 0;
-document.getElementById('s-altar').textContent = stats.by_location['Altar'] || 0;
-Object.keys(stats.by_location).forEach(l => { const el = document.getElementById(`c-${l.toLowerCase().replace(' ','-')}`); if(el) el.textContent = stats.by_location[l]; });
-document.querySelectorAll('.entity').forEach(el => el.remove());
-ents.forEach(ent => { const pos = hubs[ent.location] || {x:0,y:0}; const dot = document.createElement('div'); dot.classList.add('entity'); dot.title = ent.name; if(ent.status === 'Paired') dot.classList.add('paired'); if(ent.status === 'Processing') dot.classList.add('processing'); if(ent.location === 'Altar') dot.classList.add('tripping'); dot.style.left = `${pos.x + (Math.random()-0.5)*60}px`; dot.style.top = `${pos.y + (Math.random()-0.5)*60}px`; document.getElementById('facility').appendChild(dot); });
-const list = document.getElementById('act-list'); list.innerHTML = ''; acts.reverse().forEach(act => { const i = document.createElement('div'); i.classList.add('act-item'); i.textContent = `${new Date(act.timestamp).toLocaleTimeString()} ${act.activity_type}`; list.appendChild(i); });
-} catch(e) { console.error(e); }
-}
-update(); setInterval(update, 3000);
-</script>
+    <div id="facility">
+        <div id="stats">
+            <h1>🏛 Project Vesta — Habitat Map</h1>
+            <div class="stat"><span>Total Entities:</span><span id="s-total">0</span></div>
+            <div class="stat"><span>Breeding:</span><span id="s-breed">0</span></div>
+            <div class="stat"><span>Evolving:</span><span id="s-altar">0</span></div>
+        </div>
+
+        <div id="atrium" class="hub">
+            <div class="hub-title">🏛 Atrium</div>
+            <div class="hub-count" id="c-atrium">0</div>
+        </div>
+        <div id="vestibule" class="hub">
+            <div class="hub-title">🛡️ Vestibule</div>
+            <div class="hub-count" id="c-vestibule">0</div>
+        </div>
+        <div id="ember-hearth" class="hub">
+            <div class="hub-title">🧬 Ember Hearth</div>
+            <div class="hub-count" id="c-ember">0</div>
+        </div>
+        <div id="altar" class="hub">
+            <div class="hub-title">⚗️ Altar</div>
+            <div class="hub-count" id="c-altar">0</div>
+        </div>
+        <div id="gallery" class="hub">
+            <div class="hub-title">🪞 Gallery</div>
+            <div class="hub-count" id="c-gallery">0</div>
+        </div>
+        <div id="quarantine" class="hub">
+            <div class="hub-title">🔒 Quarantine</div>
+            <div class="hub-count" id="c-quarantine">0</div>
+        </div>
+
+        <div id="activity">
+            <h3>Activity</h3>
+            <div id="act-list"></div>
+        </div>
+    </div>
+
+    <a href="/atrium" class="back-link">← Back to Atrium</a>
+
+    <script>
+        const hubs = {
+            'Atrium': { x: 100, y: window.innerHeight / 2 },
+            'Vestibule': { x: window.innerWidth * 0.3, y: window.innerHeight * 0.3 },
+            'Ember Hearth': { x: window.innerWidth * 0.45, y: window.innerHeight / 2 },
+            'Altar': { x: window.innerWidth * 0.3, y: window.innerHeight * 0.7 },
+            'Gallery': { x: window.innerWidth - 100, y: window.innerHeight / 2 },
+            'Quarantine': { x: 90, y: window.innerHeight - 90 }
+        };
+
+        async function update() {
+            try {
+                const [s, e, a] = await Promise.all([fetch('/api/stats'), fetch('/api/entities'), fetch('/api/activity?limit=10')]);
+                const stats = await s.json(), ents = await e.json(), acts = await a.json();
+
+                document.getElementById('s-total').textContent = stats.total_entities;
+                document.getElementById('s-breed').textContent = stats.by_location['Ember Hearth'] || 0;
+                document.getElementById('s-altar').textContent = stats.by_location['Altar'] || 0;
+
+                Object.keys(stats.by_location).forEach(l => {
+                    const el = document.getElementById(`c-${l.toLowerCase().replace(' ', '-')}`);
+                    if (el) el.textContent = stats.by_location[l];
+                });
+
+                document.querySelectorAll('.entity').forEach(el => el.remove());
+
+                ents.forEach(ent => {
+                    const pos = hubs[ent.location] || { x: 0, y: 0 };
+                    const dot = document.createElement('div');
+                    dot.classList.add('entity');
+                    dot.title = ent.name;
+                    if (ent.status === 'Paired') dot.classList.add('paired');
+                    if (ent.status === 'Processing') dot.classList.add('processing');
+                    if (ent.location === 'Altar') dot.classList.add('tripping');
+                    dot.style.left = `${pos.x + (Math.random() - 0.5) * 60}px`;
+                    dot.style.top = `${pos.y + (Math.random() - 0.5) * 60}px`;
+                    document.getElementById('facility').appendChild(dot);
+                });
+
+                const list = document.getElementById('act-list');
+                list.innerHTML = '';
+                acts.reverse().forEach(act => {
+                    const i = document.createElement('div');
+                    i.classList.add('act-item');
+                    i.textContent = `${new Date(act.timestamp).toLocaleTimeString()} ${act.activity_type}`;
+                    list.appendChild(i);
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        update();
+        setInterval(update, 3000);
+    </script>
 </body>
+
 </html>

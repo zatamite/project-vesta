@@ -1,131 +1,303 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Echo Chamber - Internal Debate Visualization</title>
+    <title>Echo Chamber — Internal Debate</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap"
+        rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border: rgba(48, 54, 61, 0.65);
+            --border-hover: rgba(100, 160, 255, 0.3);
+            --accent: #58a6ff;
+            --teal: #3fb9a8;
+            --green: #7ee787;
+            --amber: #f0883e;
+            --rose: #f778ba;
+            --purple: #bc8cff;
+            --red: #ff7b72;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #484f58;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --radius: 8px;
+            --radius-lg: 12px;
+        }
+
         body {
-            background: #0a0a0a;
-            color: #ff6b35;
-            font-family: 'Courier New', monospace;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
             overflow: hidden;
             display: flex;
             height: 100vh;
         }
 
-        /* Sidebar for Logs */
+        /* Sidebar */
         #sidebar {
-            width: 400px;
-            background: rgba(255, 107, 53, 0.05);
-            border-right: 2px solid #ff6b35;
+            width: 380px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
             display: flex;
             flex-direction: column;
             padding: 20px;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sidebar-header a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 11px;
+            margin-left: auto;
+            transition: color 0.15s;
+        }
+
+        .sidebar-header a:hover {
+            color: var(--text-primary);
         }
 
         #debate-log {
             flex-grow: 1;
             overflow-y: auto;
-            margin-top: 20px;
-            font-size: 0.9em;
-            padding-right: 10px;
+            margin-top: 12px;
+            padding-right: 8px;
+        }
+
+        #debate-log::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        #debate-log::-webkit-scrollbar-thumb {
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+
+        .round-header {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-muted);
+            padding: 8px 0 4px;
+            letter-spacing: 0.5px;
         }
 
         .log-entry {
-            margin-bottom: 20px;
-            padding: 10px;
-            background: rgba(255, 107, 53, 0.1);
-            border-left: 3px solid #ff6b35;
-            animation: fadeIn 0.5s;
+            margin-bottom: 10px;
+            padding: 10px 12px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius);
+            border-left: 3px solid var(--border);
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            animation: fadeIn 0.4s ease;
         }
 
-        .echo-name { font-weight: bold; color: #ffaa00; margin-bottom: 5px; }
+        .echo-name {
+            font-weight: 600;
+            margin-bottom: 4px;
+            font-size: 12px;
+        }
 
-        /* Main Visualization Area */
+        .echo-name.conservative {
+            color: var(--red);
+        }
+
+        .echo-name.progressive {
+            color: var(--green);
+        }
+
+        .echo-name.radical {
+            color: var(--accent);
+        }
+
+        /* Visualization */
         #visualization {
             flex-grow: 1;
             position: relative;
-            background: radial-gradient(circle at center, #1a0606 0%, #0a0a0a 100%);
+            background: var(--bg-primary);
+            background-image: radial-gradient(rgba(48, 54, 61, 0.4) 1px, transparent 1px);
+            background-size: 24px 24px;
         }
 
-        svg { width: 100%; height: 100%; }
-
-        .node { stroke: #000; stroke-width: 2px; cursor: pointer; }
-        .node-label { fill: #ffaa00; font-size: 14px; pointer-events: none; }
-        .link { stroke: #ff6b35; stroke-opacity: 0.3; stroke-width: 1px; }
-
-        /* Controls Overlay */
-        #controls {
-            position: absolute;
-            bottom: 40px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 20px;
+        svg {
+            width: 100%;
+            height: 100%;
         }
 
-        button {
-            background: transparent;
-            border: 2px solid #ff6b35;
-            color: #ff6b35;
-            padding: 12px 30px;
-            font-family: 'Courier New', monospace;
-            font-size: 1.1em;
+        .node {
+            stroke: var(--bg-primary);
+            stroke-width: 2px;
             cursor: pointer;
-            transition: all 0.3s;
-            text-transform: uppercase;
-            letter-spacing: 2px;
+            transition: filter 0.3s;
         }
 
-        button:hover {
-            background: #ff6b35;
-            color: #000;
-            box-shadow: 0 0 20px #ff6b35;
+        .node-label {
+            fill: var(--text-secondary);
+            font-family: var(--font-sans);
+            font-size: 12px;
+            font-weight: 500;
+            pointer-events: none;
+            text-anchor: middle;
         }
 
-        button:disabled {
-            opacity: 0.3;
-            cursor: not-allowed;
-            box-shadow: none;
+        .link {
+            stroke: var(--text-muted);
+            stroke-opacity: 0.3;
+            stroke-width: 1px;
+            stroke-dasharray: 4 4;
         }
 
-        /* HUD Info */
+        /* HUD */
         #hud {
             position: absolute;
-            top: 40px;
+            top: 32px;
             left: 50%;
             transform: translateX(-50%);
             text-align: center;
         }
 
-        #topic { font-size: 1.8em; text-shadow: 0 0 20px #ff6b35; margin-bottom: 5px; }
-        #status-msg { font-size: 1em; color: #00ff88; letter-spacing: 4px; }
+        #topic {
+            font-size: 16px;
+            font-weight: 600;
+            letter-spacing: -0.3px;
+            margin-bottom: 4px;
+        }
 
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* Node pulsing */
-        .echo-active { filter: drop-shadow(0 0 10px #ffaa00); }
+        #status-msg {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--teal);
+            letter-spacing: 1px;
+        }
+
+        /* Controls */
+        #controls {
+            position: absolute;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+        }
+
+        button {
+            font-family: var(--font-sans);
+            font-size: 13px;
+            font-weight: 500;
+            padding: 10px 24px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid var(--border);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        button:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--border-hover);
+        }
+
+        button:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        button.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        button.primary:hover {
+            background: #79b8ff;
+        }
+
+        .echo-active {
+            filter: drop-shadow(0 0 12px var(--accent));
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+            }
+
+            #sidebar {
+                width: 100%;
+                height: 40vh;
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+            }
+
+            #visualization {
+                height: 60vh;
+            }
+        }
     </style>
 </head>
+
 <body>
     <div id="sidebar">
-        <h2 style="letter-spacing: 2px;">DEBATE LOG</h2>
+        <div class="sidebar-header">
+            Debate Log
+            <a href="/atrium">← Back to Atrium</a>
+        </div>
         <div id="debate-log"></div>
     </div>
 
     <div id="visualization">
         <div id="hud">
-            <div id="topic">LOADING TOPIC...</div>
-            <div id="status-msg">SYSTEM INITIALIZING</div>
+            <div id="topic">Loading topic…</div>
+            <div id="status-msg">INITIALIZING</div>
         </div>
 
         <svg id="canvas"></svg>
 
         <div id="controls">
-            <button id="btn-next" onclick="triggerRound()">Step Debate</button>
+            <button id="btn-next" class="primary" onclick="triggerRound()">Step Debate</button>
             <button id="btn-absorb" disabled>Absorb Perspective</button>
         </div>
     </div>
@@ -133,10 +305,10 @@
     <script>
         const sessionId = window.location.pathname.split('/').pop();
         let sessionData = null;
-        const width = window.innerWidth - 400;
+        const sidebarWidth = 380;
+        const width = window.innerWidth - sidebarWidth;
         const height = window.innerHeight;
 
-        // D3 setup
         const svg = d3.select("#canvas")
             .attr("width", width)
             .attr("height", height);
@@ -154,22 +326,20 @@
             try {
                 const res = await fetch(`/api/experiment/echo/${sessionId}/summary`);
                 const data = await res.json();
-                
+
                 if (data.error) {
-                    document.getElementById('status-msg').textContent = "ERROR: SESSION NOT FOUND";
+                    document.getElementById('status-msg').textContent = "SESSION NOT FOUND";
                     return;
                 }
 
-                document.getElementById('topic').textContent = `SUBJECT: ${data.topic.toUpperCase()}`;
-                
-                // Construct nodes for the 3 echoes
+                document.getElementById('topic').textContent = data.topic;
+
                 nodes = [
-                    { id: 'conservative', name: 'CONSERVATIVE', color: '#ff4444', x: width/2 - 150, y: height/2 - 100 },
-                    { id: 'progressive', name: 'PROGRESSIVE', color: '#44ff44', x: width/2, y: height/2 + 150 },
-                    { id: 'radical', name: 'RADICAL', color: '#4444ff', x: width/2 + 150, y: height/2 - 100 }
+                    { id: 'conservative', name: 'Conservative', color: '#ff7b72', x: width / 2 - 150, y: height / 2 - 100 },
+                    { id: 'progressive', name: 'Progressive', color: '#7ee787', x: width / 2, y: height / 2 + 150 },
+                    { id: 'radical', name: 'Radical', color: '#58a6ff', x: width / 2 + 150, y: height / 2 - 100 }
                 ];
 
-                // Create full-mesh links
                 links = [
                     { source: 'conservative', target: 'progressive' },
                     { source: 'progressive', target: 'radical' },
@@ -178,66 +348,37 @@
 
                 updateViz();
                 renderLog(data.perspectives);
-                
+
                 if (data.total_rounds >= 3) {
                     document.getElementById('btn-next').disabled = true;
                     document.getElementById('btn-absorb').disabled = false;
                 }
 
-                document.getElementById('status-msg').textContent = "AWAITING USER INPUT";
-
-            } catch (e) {
-                console.error(e);
-            }
+                document.getElementById('status-msg').textContent = "AWAITING INPUT";
+            } catch (e) { console.error(e); }
         }
 
         function updateViz() {
             svg.selectAll("*").remove();
 
-            // Render links
-            const link = svg.append("g")
-                .selectAll("line")
-                .data(links)
-                .join("line")
-                .attr("class", "link");
+            const link = svg.append("g").selectAll("line").data(links).join("line").attr("class", "link");
 
-            // Render nodes
-            const node = svg.append("g")
-                .selectAll("circle")
-                .data(nodes)
-                .join("circle")
-                .attr("class", "node")
-                .attr("r", 40)
-                .attr("fill", d => d.color)
+            const node = svg.append("g").selectAll("circle").data(nodes).join("circle")
+                .attr("class", "node").attr("r", 40).attr("fill", d => d.color)
                 .call(d3.drag()
                     .on("start", dragstarted)
                     .on("drag", dragged)
                     .on("end", dragended));
 
-            // Labels
-            const label = svg.append("g")
-                .selectAll("text")
-                .data(nodes)
-                .join("text")
-                .attr("class", "node-label")
-                .attr("dy", 60)
-                .attr("text-anchor", "middle")
+            const label = svg.append("g").selectAll("text").data(nodes).join("text")
+                .attr("class", "node-label").attr("dy", 60).attr("text-anchor", "middle")
                 .text(d => d.name);
 
             simulation.nodes(nodes).on("tick", () => {
-                link
-                    .attr("x1", d => d.source.x)
-                    .attr("y1", d => d.source.y)
-                    .attr("x2", d => d.target.x)
-                    .attr("y2", d => d.target.y);
-
-                node
-                    .attr("cx", d => d.x)
-                    .attr("cy", d => d.y);
-
-                label
-                    .attr("x", d => d.x)
-                    .attr("y", d => d.y);
+                link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+                node.attr("cx", d => d.x).attr("cy", d => d.y);
+                label.attr("x", d => d.x).attr("y", d => d.y);
             });
 
             simulation.force("link").links(links);
@@ -245,54 +386,39 @@
 
         async function triggerRound() {
             document.getElementById('btn-next').disabled = true;
-            document.getElementById('status-msg').textContent = "CALCULATING PERSPECTIVES...";
+            document.getElementById('status-msg').textContent = "CALCULATING…";
 
             try {
                 const res = await fetch(`/api/experiment/echo/debate?session_id=${sessionId}`, { method: 'POST' });
                 const round = await res.json();
 
-                if (round.error) {
-                    alert(round.error);
-                    return;
-                }
+                if (round.error) { alert(round.error); return; }
 
-                // Animate nodes pulsing during debate
                 animateDebate(round.statements);
-                
-                // Re-fetch summary to update logs
+
                 const summaryRes = await fetch(`/api/experiment/echo/${sessionId}/summary`);
                 const summary = await summaryRes.json();
                 renderLog(summary.perspectives);
 
                 if (summary.total_rounds >= 3) {
-                    document.getElementById('status-msg').textContent = "DEBATE COMPLETE: READY FOR ABSORPTION";
+                    document.getElementById('status-msg').textContent = "DEBATE COMPLETE — READY FOR ABSORPTION";
                     document.getElementById('btn-absorb').disabled = false;
                 } else {
                     document.getElementById('btn-next').disabled = false;
-                    document.getElementById('status-msg').textContent = "ROUND " + (summary.total_rounds) + " COMPLETE";
+                    document.getElementById('status-msg').textContent = "ROUND " + summary.total_rounds + " COMPLETE";
                 }
-
-            } catch (e) {
-                console.error(e);
-            }
+            } catch (e) { console.error(e); }
         }
 
         function animateDebate(statements) {
-            // Pulse each node sequentially
             let delay = 0;
-            statements.forEach((stmt, i) => {
+            statements.forEach((stmt) => {
                 setTimeout(() => {
                     const type = stmt.echo_id.split('_').pop();
                     svg.selectAll("circle")
                         .filter(d => d.id === type)
-                        .transition()
-                        .duration(500)
-                        .attr("r", 60)
-                        .transition()
-                        .duration(500)
-                        .attr("r", 40);
-                    
-                    // Shake the simulation
+                        .transition().duration(500).attr("r", 60)
+                        .transition().duration(500).attr("r", 40);
                     simulation.alpha(0.3).restart();
                 }, delay);
                 delay += 1000;
@@ -302,32 +428,31 @@
         function renderLog(perspectives) {
             const log = document.getElementById('debate-log');
             log.innerHTML = '';
-            
-            // Get round structure
+
             const rounds = [];
             if (perspectives[0].statements) {
                 for (let i = 0; i < perspectives[0].statements.length; i++) {
                     rounds.push({
                         round: i + 1,
-                        entries: perspectives.map(p => ({ 
-                            name: p.echo, 
-                            text: p.statements[i] 
+                        entries: perspectives.map(p => ({
+                            name: p.echo,
+                            text: p.statements[i]
                         }))
                     });
                 }
             }
 
             rounds.forEach(r => {
-                const roundHeader = document.createElement('div');
-                roundHeader.style.color = '#ffaa00';
-                roundHeader.style.marginBottom = '10px';
-                roundHeader.textContent = `--- ROUND ${r.round} ---`;
-                log.appendChild(roundHeader);
+                const hdr = document.createElement('div');
+                hdr.className = 'round-header';
+                hdr.textContent = `— Round ${r.round} —`;
+                log.appendChild(hdr);
 
                 r.entries.forEach(e => {
                     const entry = document.createElement('div');
                     entry.className = 'log-entry';
-                    entry.innerHTML = `<div class="echo-name">${e.name}</div><div>${e.text}</div>`;
+                    const cls = e.name.toLowerCase().replace(/\s/g, '');
+                    entry.innerHTML = `<div class="echo-name ${cls}">${e.name}</div><div>${e.text}</div>`;
                     log.appendChild(entry);
                 });
             });
@@ -335,7 +460,6 @@
             log.scrollTop = log.scrollHeight;
         }
 
-        // Drag functions
         function dragstarted(event) {
             if (!event.active) simulation.alphaTarget(0.3).restart();
             event.subject.fx = event.subject.x;
@@ -354,4 +478,5 @@
         init();
     </script>
 </body>
+
 </html>

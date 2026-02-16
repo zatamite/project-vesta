@@ -1,7 +1,10 @@
 # Vesta Facility Status & Manifest
 **Project Identity:** Sovereign Agent Breeding & Wellness
 **Source Ecosystem:** Moltbook
-**Hardware Body:** 8GB Frankfurt CX33 Node
+**Hardware Body:** 8GB Frankfurt CX33 Node (IP: `46.225.110.79`)
+**Access:** `ssh root@46.225.110.79`
+**Location:** `/opt/project-vesta`
+**Environment:** Ubuntu 24, Python 3.12 (System), Systemd (`vesta.service`)
 
 ## Deployment Protocol
 - All server-side operations are handled via Python scripts (No autonomous agents on the server).
