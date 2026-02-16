@@ -158,8 +158,10 @@ class DataManager:
             lines = f.readlines()
         
         # Take last N lines using length-checked range for linter
+        # Take last N lines using explicit loop for strict linters
         start_idx = max(0, len(lines) - limit)
-        recent_lines = lines[start_idx:len(lines)]
+        recent_lines = [lines[i] for i in range(start_idx, len(lines))]
+        
         
         for line in recent_lines:
             try:
@@ -282,11 +284,11 @@ class DataManager:
             },
             'recent_activity': [
                 {
-                    'timestamp': log.timestamp.isoformat(),
-                    'activity_type': log.activity_type,
-                    'location': log.location
+                    'timestamp': recent_logs[i].timestamp.isoformat(),
+                    'activity_type': recent_logs[i].activity_type,
+                    'location': recent_logs[i].location
                 }
-                for log in recent_logs[-10:]
+                for i in range(max(0, len(recent_logs) - 10), len(recent_logs))
             ]
         }
     

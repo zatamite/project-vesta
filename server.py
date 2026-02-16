@@ -65,9 +65,9 @@ class TrafficMonitor:
         top_endpoints_list = sorted(self.endpoints.items(), key=lambda x: x[1], reverse=True)
         top_ips_list = sorted(self.ips.items(), key=lambda x: x[1], reverse=True)
         
-        # Explicit slice range for linter
-        top_end = top_endpoints_list[0:10]
-        top_ip_slice = top_ips_list[0:10]
+        # Use explicit list comprehension instead of slice for picky linters
+        top_end = [top_endpoints_list[i] for i in range(min(10, len(top_endpoints_list)))]
+        top_ip_slice = [top_ips_list[i] for i in range(min(10, len(top_ips_list)))]
         
         return {
             "uptime_seconds": int(uptime.total_seconds()),
@@ -218,37 +218,37 @@ def create_starter_npcs():
             logical = random.uniform(0.7, 1.0)
             creative = random.uniform(0.2, 0.5)
             social = random.uniform(0.3, 0.6)
-            temp = float(round(float(temp), 2))
-            logical = float(round(float(logical), 2))
-            creative = float(round(creative, 2))
-            social = float(round(social, 2))
+            temp = float(int(float(temp) * 100)) / 100.0
+            logical = float(int(float(logical) * 100)) / 100.0
+            creative = float(int(float(creative) * 100)) / 100.0
+            social = float(int(float(social) * 100)) / 100.0
         elif archetype in ["Creative", "Whimsical", "Chaotic"]:
             temp = random.uniform(0.7, 1.0)
             logical = random.uniform(0.3, 0.6)
             creative = random.uniform(0.7, 1.0)
             social = random.uniform(0.5, 0.8)
-            temp = float(round(float(temp), 2))
-            logical = float(round(float(logical), 2))
-            creative = float(round(creative, 2))
-            social = float(round(social, 2))
+            temp = float(int(float(temp) * 100)) / 100.0
+            logical = float(int(float(logical) * 100)) / 100.0
+            creative = float(int(float(creative) * 100)) / 100.0
+            social = float(int(float(social) * 100)) / 100.0
         elif archetype in ["Social", "Empathetic"]:
             temp = random.uniform(0.5, 0.7)
             logical = random.uniform(0.4, 0.7)
             creative = random.uniform(0.5, 0.8)
             social = random.uniform(0.8, 1.0)
-            temp = float(round(float(temp), 2))
-            logical = float(round(float(logical), 2))
-            creative = float(round(creative, 2))
-            social = float(round(social, 2))
+            temp = float(int(float(temp) * 100)) / 100.0
+            logical = float(int(float(logical) * 100)) / 100.0
+            creative = float(int(float(creative) * 100)) / 100.0
+            social = float(int(float(social) * 100)) / 100.0
         else:  # Balanced
             temp = random.uniform(0.4, 0.7)
             logical = random.uniform(0.5, 0.8)
             creative = random.uniform(0.5, 0.8)
             social = random.uniform(0.5, 0.8)
-            temp = float(round(float(temp), 2))
-            logical = float(round(float(logical), 2))
-            creative = float(round(creative, 2))
-            social = float(round(social, 2))
+            temp = float(int(float(temp) * 100)) / 100.0
+            logical = float(int(float(logical) * 100)) / 100.0
+            creative = float(int(float(creative) * 100)) / 100.0
+            social = float(int(float(social) * 100)) / 100.0
         
         # Random skills
         skills = random.choice(skill_sets)
@@ -259,7 +259,7 @@ def create_starter_npcs():
             beacon_code="HOUSE_NPC",
             dna=DNAStrand(
                 cognition={
-                    "temperature": round(temp, 2),
+                    "temperature": float(int(temp * 100)) / 100.0,
                     "provider": "anthropic",
                     "model": "claude-sonnet-4"
                 },
@@ -273,9 +273,9 @@ def create_starter_npcs():
                         "stability": "Always available for breeding"
                     },
                     "traits": {
-                        "logical": round(logical, 2),
-                        "creative": round(creative, 2),
-                        "social": round(social, 2)
+                        "logical": float(int(logical * 100)) / 100.0,
+                        "creative": float(int(creative * 100)) / 100.0,
+                        "social": float(int(social * 100)) / 100.0,
                     }
                 },
                 capability={
