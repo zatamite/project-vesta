@@ -2,10 +2,13 @@
 Vesta Server - Main FastAPI Application
 Phase 1: Core breeding + Agent feedback + Habitat foundation
 """
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
-from fastapi.responses import HTMLResponse, FileResponse
+import os, re, time, html
+from collections import defaultdict
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Depends, Header
+from fastapi.responses import HTMLResponse, FileResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Dict, List
 from pathlib import Path
@@ -33,6 +36,70 @@ from constraint_lab import ConstraintLaboratory
 
 # Initialize
 app = FastAPI(title="Project Vesta", version="2.0-rebuild")
+
+# === Security Configuration ===
+
+# Admin API key — set via environment variable or use generated default
+ADMIN_API_KEY = os.environ.get("VESTA_ADMIN_KEY", "vesta_admin_IiHPs_pry3rBlQAxWTT0jemauwlbr9pg5Ia7QZTmMcI")
+
+# CORS — restrict to same-origin and known frontends
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://46.225.110.79:8000", "http://localhost:8000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Admin Auth Dependency ---
+async def require_admin(x_admin_key: str = Header(None)):
+    """Protect admin endpoints with API key header."""
+    if x_admin_key != ADMIN_API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid or missing admin key. Send X-Admin-Key header.")
+
+# --- Rate Limiter ---
+class RateLimiter:
+    """Simple in-memory per-IP rate limiter."""
+    def __init__(self):
+        self.requests = defaultdict(list)  # ip -> [timestamps]
+
+    def check(self, ip: str, limit: int = 60, window: int = 60) -> bool:
+        """Returns True if allowed, False if rate-limited."""
+        now = time.time()
+        self.requests[ip] = [t for t in self.requests[ip] if now - t < window]
+        if len(self.requests[ip]) >= limit:
+            return False
+        self.requests[ip].append(now)
+        return True
+
+rate_limiter = RateLimiter()
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Global rate limiting: 60 req/min per IP, 5/min for registration."""
+    ip = request.client.host if request.client else "unknown"
+    path = request.url.path
+
+    # Stricter limit for registration/beacon endpoints
+    if path in ("/api/request_beacon", "/api/register"):
+        if not rate_limiter.check(ip, limit=5, window=60):
+            return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Max 5 registration requests per minute."})
+    # General limit
+    elif path.startswith("/api/"):
+        if not rate_limiter.check(ip, limit=60, window=60):
+            return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Max 60 requests per minute."})
+
+    return await call_next(request)
+
+# --- XSS Sanitizer ---
+def sanitize(text: str) -> str:
+    """Strip HTML tags and escape dangerous characters."""
+    if not text:
+        return text
+    # Remove HTML tags
+    clean = re.sub(r'<[^>]+>', '', text)
+    # Escape remaining HTML entities
+    clean = html.escape(clean)
+    return clean.strip()
 data_manager = DataManager()
 soul_parser = SoulParser()
 breeding_engine = BreedingEngine()
@@ -322,6 +389,8 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.post("/api/register")
 async def register_entity(request: RegistrationRequest):
     """Register new entity with beacon code."""
+    # Sanitize name
+    request.name = sanitize(request.name)
     # Validate beacon
     beacon = data_manager.load_beacon(request.beacon_code)
     if not beacon or beacon.used:
@@ -374,6 +443,8 @@ async def register_entity(request: RegistrationRequest):
 @app.post("/api/feedback")
 async def submit_feedback(request: FeedbackRequest):
     """Agent submits feedback/issue report."""
+    request.message = sanitize(request.message)
+    request.issue_type = sanitize(request.issue_type)
     feedback = feedback_manager.submit_feedback(
         beacon_code=request.beacon_code,
         issue_type=request.issue_type,
@@ -812,6 +883,10 @@ async def request_beacon(request: Dict[str, str]):
     Public endpoint - agents can request beacon codes.
     Simple and open for easy onboarding.
     """
+    # Sanitize inputs
+    for key in request:
+        if isinstance(request[key], str):
+            request[key] = sanitize(request[key])
     from datetime import datetime, timezone
     
     agent_name = request.get("agent_name", "Unknown")
@@ -880,9 +955,50 @@ async def download_soul(entity_id: str):
 """
     return Response(content=soul_content, media_type="text/markdown", headers={"Content-Disposition": f"attachment; filename=soul_{entity.name}.md"})
 
+@app.get("/api/entities/{entity_id}/variants")
+async def get_soul_variants_list(entity_id: str):
+    """List available soul variants."""
+    entity = data_manager.load_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+        
+    variants = soul_library.list_variants(entity)
+    return {
+        "entity_id": entity_id,
+        "active_variant": entity.active_soul_variant,
+        "variants": variants
+    }
+
+@app.get("/api/entities/{entity_id}/variant_content")
+async def get_variant_content(entity_id: str, variant: str):
+    """Get specific soul variant content."""
+    from fastapi.responses import Response
+    
+    entity = data_manager.load_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+        
+    content = soul_library.get_variant(entity, variant)
+    if not content:
+        raise HTTPException(404, "Variant not found")
+        
+    return Response(content=content, media_type="text/markdown", headers={"Content-Disposition": f"attachment; filename=soul_{entity.name}_{variant}.md"})
+
+@app.get("/api/entities/{entity_id}/offspring")
+async def get_entity_offspring(entity_id: str):
+    """Get list of offspring."""
+    all_entities = data_manager.load_all_entities()
+    offspring = [e for e in all_entities if e.parent_ids and entity_id in e.parent_ids]
+    
+    return {
+        "entity_id": entity_id,
+        "count": len(offspring),
+        "offspring": [e.model_dump(include={'entity_id', 'name', 'generation', 'dna'}) for e in offspring]
+    }
+
 # === Admin ===
 
-@app.post("/api/admin/generate_beacons")
+@app.post("/api/admin/generate_beacons", dependencies=[Depends(require_admin)])
 async def generate_beacons(count: int = 10):
     """Generate beacon codes."""
     beacons = data_manager.generate_beacons(count)
@@ -892,7 +1008,7 @@ async def generate_beacons(count: int = 10):
         "beacons": [{"code": b.beacon_code, "tier": b.tier} for b in beacons]
     }
 
-@app.get("/api/admin/feedback")
+@app.get("/api/admin/feedback", dependencies=[Depends(require_admin)])
 async def get_feedback_queue():
     """Get all feedback tickets (operator dashboard)."""
     open_tickets = feedback_manager.get_open_tickets()
@@ -901,7 +1017,7 @@ async def get_feedback_queue():
         "tickets": [f.model_dump() for f in open_tickets]
     }
 
-@app.post("/api/admin/feedback/{feedback_id}/respond")
+@app.post("/api/admin/feedback/{feedback_id}/respond", dependencies=[Depends(require_admin)])
 async def respond_to_feedback(
     feedback_id: str,
     response: str,
@@ -1029,6 +1145,8 @@ async def get_reflection_prompt(entity_id: str, event_type: str = "Arrival"):
 
 @app.post("/api/reflect/submit")
 async def submit_reflection(request: ReflectionRequest):
+    request.question = sanitize(request.question)
+    request.answer = sanitize(request.answer)
     entity = data_manager.load_entity(request.entity_id)
     if not entity:
         raise HTTPException(404, "Entity not found")
