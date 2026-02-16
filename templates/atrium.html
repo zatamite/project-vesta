@@ -322,13 +322,53 @@
         }
 
         #lineage-graph {
-            height: 340px;
+            height: 450px;
             position: relative;
         }
 
         #lineage-svg {
             width: 100%;
             height: 100%;
+            cursor: grab;
+        }
+
+        #lineage-svg:active {
+            cursor: grabbing;
+        }
+
+        .zoom-controls {
+            display: flex;
+            gap: 4px;
+            margin-left: 12px;
+        }
+
+        .zoom-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+        }
+
+        .zoom-btn:hover {
+            border-color: var(--border-hover);
+            color: var(--text-primary);
+        }
+
+        .zoom-hint {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--text-muted);
+            padding: 4px 10px;
+            text-align: center;
+            border-top: 1px solid var(--border);
         }
 
         .node-label {
@@ -815,15 +855,23 @@
             <div class="constellation-panel">
                 <div class="panel-header">
                     <span>Entity Relationships</span>
-                    <div class="legend">
-                        <span><span class="legend-dot" style="background:var(--amber)"></span>Gen 0</span>
-                        <span><span class="legend-dot" style="background:var(--rose)"></span>Gen 1</span>
-                        <span><span class="legend-dot" style="background:var(--purple)"></span>Gen 2+</span>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <div class="legend">
+                            <span><span class="legend-dot" style="background:var(--amber)"></span>Gen 0</span>
+                            <span><span class="legend-dot" style="background:var(--rose)"></span>Gen 1</span>
+                            <span><span class="legend-dot" style="background:var(--purple)"></span>Gen 2+</span>
+                        </div>
+                        <div class="zoom-controls">
+                            <button class="zoom-btn" id="zoom-in" title="Zoom in">+</button>
+                            <button class="zoom-btn" id="zoom-out" title="Zoom out">−</button>
+                            <button class="zoom-btn" id="zoom-reset" title="Reset view">⟲</button>
+                        </div>
                     </div>
                 </div>
                 <div id="lineage-graph">
                     <svg id="lineage-svg"></svg>
                 </div>
+                <div class="zoom-hint">Scroll to zoom · Drag to pan</div>
                 <div class="node-tooltip" id="tooltip"></div>
             </div>
         </section>
@@ -909,6 +957,20 @@
                 const svg = d3.select('#lineage-svg').attr('width', width).attr('height', height);
                 svg.selectAll('*').remove();
 
+                // Zoom container — all graph elements go inside this g
+                const g = svg.append('g');
+
+                const zoomBehavior = d3.zoom()
+                    .scaleExtent([0.2, 5])
+                    .on('zoom', (event) => { g.attr('transform', event.transform); });
+
+                svg.call(zoomBehavior);
+
+                // Wire zoom buttons
+                document.getElementById('zoom-in').onclick = () => svg.transition().duration(300).call(zoomBehavior.scaleBy, 1.4);
+                document.getElementById('zoom-out').onclick = () => svg.transition().duration(300).call(zoomBehavior.scaleBy, 0.7);
+                document.getElementById('zoom-reset').onclick = () => svg.transition().duration(300).call(zoomBehavior.transform, d3.zoomIdentity);
+
                 const nodes = entities.map(e => ({
                     id: e.entity_id, name: e.name,
                     generation: e.generation || 0,
@@ -934,9 +996,9 @@
                     .force('center', d3.forceCenter(width / 2, height / 2))
                     .force('collision', d3.forceCollide().radius(24));
 
-                const link = svg.append('g').selectAll('line').data(links).join('line').attr('class', 'link-line');
+                const link = g.append('g').selectAll('line').data(links).join('line').attr('class', 'link-line');
 
-                const node = svg.append('g').selectAll('circle').data(nodes).join('circle')
+                const node = g.append('g').selectAll('circle').data(nodes).join('circle')
                     .attr('r', d => d.generation === 0 ? 10 : 7)
                     .attr('fill', genColor).attr('fill-opacity', 0.9)
                     .attr('stroke', genColor).attr('stroke-width', 1).attr('stroke-opacity', 0.3)
@@ -955,13 +1017,13 @@
                     })
                     .on('mouseout', () => { document.getElementById('tooltip').style.display = 'none'; });
 
-                const label = svg.append('g').selectAll('text').data(nodes).join('text')
+                const label = g.append('g').selectAll('text').data(nodes).join('text')
                     .attr('class', 'node-label').attr('dy', d => (d.generation === 0 ? 22 : 18))
                     .text(d => d.name.length > 12 ? d.name.slice(0, 10) + '…' : d.name);
 
                 sim.on('tick', () => {
                     link.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y);
-                    node.attr('cx', d => Math.max(12, Math.min(width - 12, d.x))).attr('cy', d => Math.max(12, Math.min(height - 12, d.y)));
+                    node.attr('cx', d => d.x).attr('cy', d => d.y);
                     label.attr('x', d => d.x).attr('y', d => d.y);
                 });
             } catch (e) {
