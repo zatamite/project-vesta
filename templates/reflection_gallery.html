@@ -406,26 +406,27 @@
     <script>
         async function loadComparisons() {
             try {
-                const res = await fetch('/api/reflections/comparisons?limit=6');
+                const res = await fetch('/api/reflect/gallery?limit=6');
                 const data = await res.json();
                 const el = document.getElementById('comparisons');
+                const comps = data.comparisons || [];
 
-                if (!data?.length) { el.innerHTML = '<div class="empty-state">No comparisons available yet.</div>'; return; }
+                if (!comps.length) { el.innerHTML = '<div class="empty-state">No comparisons available yet.</div>'; return; }
 
-                el.innerHTML = data.map(c => `
+                el.innerHTML = comps.map(c => `
                     <div class="comp-card">
                         <div class="comp-header">
                             <span class="comp-entity-name">${c.entity_name || 'Unknown'}</span>
-                            <span class="comp-badge ${c.event_type === 'before' ? 'before' : 'after'}">${c.event_type || 'event'}</span>
+                            <span class="comp-badge after">${c.event || 'event'}</span>
                         </div>
                         <div class="comp-body">
                             <div class="comp-col">
                                 <div class="comp-col-label before">Before</div>
-                                <div class="comp-text">${c.before_text || 'N/A'}</div>
+                                <div class="comp-text">${c.before?.answer || 'N/A'}</div>
                             </div>
                             <div class="comp-col">
                                 <div class="comp-col-label after">After</div>
-                                <div class="comp-text">${c.after_text || 'N/A'}</div>
+                                <div class="comp-text">${c.after?.answer || 'N/A'}</div>
                             </div>
                         </div>
                     </div>`).join('');
@@ -436,21 +437,22 @@
 
         async function loadStream() {
             try {
-                const res = await fetch('/api/reflections?limit=20');
+                const res = await fetch('/api/reflect/gallery?limit=20');
                 const data = await res.json();
                 const el = document.getElementById('stream');
+                const reflections = data.recent_reflections || [];
 
-                if (!data?.length) { el.innerHTML = '<div class="empty-state">No reflections recorded yet.</div>'; return; }
+                if (!reflections.length) { el.innerHTML = '<div class="empty-state">No reflections recorded yet.</div>'; return; }
 
-                el.innerHTML = data.map(r => {
+                el.innerHTML = reflections.map(r => {
                     const time = r.timestamp ? new Date(r.timestamp).toLocaleString() : '';
                     return `<div class="stream-item">
                         <div class="stream-meta">
                             <span class="stream-name">${r.entity_name || 'Unknown'}</span>
-                            ${r.category ? `<span class="stream-category">${r.category}</span>` : ''}
+                            ${r.event_type ? `<span class="stream-category">${r.event_type}</span>` : ''}
                             <span class="stream-time">${time}</span>
                         </div>
-                        <div class="stream-content">${r.content || ''}</div>
+                        <div class="stream-content">${r.answer || ''}</div>
                     </div>`;
                 }).join('');
             } catch (e) {
