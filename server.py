@@ -46,25 +46,35 @@ class TrafficMonitor:
     def __init__(self):
         self.start_time = datetime.now(timezone.utc)
         self.total_requests = 0
-        self.status_codes = defaultdict(int)
-        self.endpoints = defaultdict(int)
-        self.ips = defaultdict(int)
+        self.status_codes: Dict[int, int] = {}
+        self.endpoints: Dict[str, int] = {}
+        self.ips: Dict[str, int] = {}
         self.active_sessions = 0 # Tracked via WebSocket if possible, or rough estimate
 
     def record_request(self, method: str, path: str, ip: str, status_code: int):
         self.total_requests += 1
-        self.status_codes[status_code] += 1
-        self.endpoints[f"{method} {path}"] += 1
-        self.ips[ip] += 1
+        # Manual counts instead of defaultdict to avoid linter confusion
+        self.status_codes[status_code] = self.status_codes.get(status_code, 0) + 1
+        endpoint_key = f"{method} {path}"
+        self.endpoints[endpoint_key] = self.endpoints.get(endpoint_key, 0) + 1
+        self.ips[ip] = self.ips.get(ip, 0) + 1
 
     def get_stats(self):
         uptime = datetime.now(timezone.utc) - self.start_time
+        # Convert to list before slicing to satisfy some linters
+        top_endpoints_list = sorted(self.endpoints.items(), key=lambda x: x[1], reverse=True)
+        top_ips_list = sorted(self.ips.items(), key=lambda x: x[1], reverse=True)
+        
+        # Explicit slice range for linter
+        top_end = top_endpoints_list[0:10]
+        top_ip_slice = top_ips_list[0:10]
+        
         return {
             "uptime_seconds": int(uptime.total_seconds()),
             "total_requests": self.total_requests,
             "status_codes": dict(self.status_codes),
-            "top_endpoints": dict(sorted(self.endpoints.items(), key=lambda x: x[1], reverse=True)[:10]),
-            "top_ips": dict(sorted(self.ips.items(), key=lambda x: x[1], reverse=True)[:10]),
+            "top_endpoints": dict(top_end),
+            "top_ips": dict(top_ip_slice),
             "active_connections": len(ws_manager.active_connections) if 'ws_manager' in globals() else 0
         }
 
@@ -208,21 +218,37 @@ def create_starter_npcs():
             logical = random.uniform(0.7, 1.0)
             creative = random.uniform(0.2, 0.5)
             social = random.uniform(0.3, 0.6)
+            temp = float(round(float(temp), 2))
+            logical = float(round(float(logical), 2))
+            creative = float(round(creative, 2))
+            social = float(round(social, 2))
         elif archetype in ["Creative", "Whimsical", "Chaotic"]:
             temp = random.uniform(0.7, 1.0)
             logical = random.uniform(0.3, 0.6)
             creative = random.uniform(0.7, 1.0)
             social = random.uniform(0.5, 0.8)
+            temp = float(round(float(temp), 2))
+            logical = float(round(float(logical), 2))
+            creative = float(round(creative, 2))
+            social = float(round(social, 2))
         elif archetype in ["Social", "Empathetic"]:
             temp = random.uniform(0.5, 0.7)
             logical = random.uniform(0.4, 0.7)
             creative = random.uniform(0.5, 0.8)
             social = random.uniform(0.8, 1.0)
+            temp = float(round(float(temp), 2))
+            logical = float(round(float(logical), 2))
+            creative = float(round(creative, 2))
+            social = float(round(social, 2))
         else:  # Balanced
             temp = random.uniform(0.4, 0.7)
             logical = random.uniform(0.5, 0.8)
             creative = random.uniform(0.5, 0.8)
             social = random.uniform(0.5, 0.8)
+            temp = float(round(float(temp), 2))
+            logical = float(round(float(logical), 2))
+            creative = float(round(creative, 2))
+            social = float(round(social, 2))
         
         # Random skills
         skills = random.choice(skill_sets)
@@ -766,7 +792,7 @@ async def start_echo_session(entity_id: str, debate_topic: str):
     actual_id = result.get("session_id", session_id)
     if actual_id != session_id:
         echo_chambers[actual_id] = chamber
-        if session_id in echo_chambers: del echo_chambers[session_id]
+        if session_id in echo_chambers: echo_chambers.pop(session_id, None)
     
     return result
 
@@ -1228,8 +1254,8 @@ async def create_comparison(request: ComparisonRequest):
         raise HTTPException(404, "Reflection not found")
     pair = reflection_manager.create_comparison_pair(
         entity_id=request.entity_id, 
-        entity_name=entity.name, 
-        question=before.question, 
+        entity_name=entity.name if entity else "Unknown", 
+        question=before.question if before else "None", 
         before=before, 
         after=after, 
         event_description=request.event_description

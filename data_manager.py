@@ -157,8 +157,9 @@ class DataManager:
         with open(self.arrival_ledger, 'r') as f:
             lines = f.readlines()
         
-        # Take last N lines
-        recent_lines = lines[-limit:] if len(lines) > limit else lines
+        # Take last N lines using length-checked range for linter
+        start_idx = max(0, len(lines) - limit)
+        recent_lines = lines[start_idx:len(lines)]
         
         for line in recent_lines:
             try:
@@ -172,21 +173,6 @@ class DataManager:
     def load_activity_log(self, limit: int = 100) -> List[ArrivalLog]:
         """Alias for get_recent_activity."""
         return self.get_recent_activity(limit)
-        
-        with open(self.arrival_ledger, 'r') as f:
-            lines = f.readlines()
-        
-        # Get last N lines
-        recent = lines[-limit:] if len(lines) > limit else lines
-        
-        logs = []
-        for line in recent:
-            try:
-                logs.append(ArrivalLog.model_validate_json(line))
-            except:
-                continue
-        
-        return logs
     
     # === Birth Certificates ===
     
@@ -339,7 +325,10 @@ if __name__ == "__main__":
     
     dm.save_entity(entity)
     loaded = dm.load_entity(entity.entity_id)
-    print(f"Entity saved and loaded: {loaded.name}")
+    if loaded:
+        print(f"Entity saved and loaded: {loaded.name}")
+    else:
+        print("Failed to load saved entity")
     
     # Test beacon generation
     beacons = dm.generate_beacons(5)
