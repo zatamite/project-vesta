@@ -106,6 +106,10 @@ async def require_admin(request: Request, x_admin_key: str = Header(None)):
     if session_token == ADMIN_PASSWORD: # Simple direct token for now as per user request
         return
 
+    # If not authorized, decide whether to redirect (for UI) or return JSON (for API)
+    if "api" not in request.url.path:
+        raise HTTPException(status_code=303, headers={"Location": "/admin/login"})
+
     raise HTTPException(status_code=403, detail="Unauthorized. Access requires Admin Key or Password.")
 
 # --- Rate Limiter ---
