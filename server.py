@@ -5,7 +5,7 @@ Phase 1: Core breeding + Agent feedback + Habitat foundation
 import os, re, time, html
 from collections import defaultdict
 from fastapi import FastAPI, WebSocket, Request, HTTPException, Header, Depends, Form, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -69,7 +69,6 @@ class TrafficMonitor:
         }
 
 traffic_monitor = TrafficMonitor()
-
 # === Security Configuration ===
 
 # Admin API key — set via environment variable or use generated default
@@ -436,6 +435,8 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.post("/api/register")
 async def register_entity(request: RegistrationRequest):
     """Register new entity with beacon code."""
+    # Sanitize name
+    request.name = sanitize(request.name)
     # Validate beacon
     beacon = data_manager.load_beacon(request.beacon_code)
     if not beacon or beacon.used:
@@ -488,6 +489,8 @@ async def register_entity(request: RegistrationRequest):
 @app.post("/api/feedback")
 async def submit_feedback(request: FeedbackRequest):
     """Agent submits feedback/issue report."""
+    request.message = sanitize(request.message)
+    request.issue_type = sanitize(request.issue_type)
     feedback = feedback_manager.submit_feedback(
         beacon_code=request.beacon_code,
         issue_type=request.issue_type,
