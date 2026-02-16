@@ -860,7 +860,7 @@ async def get_echo_summary(session_id: str):
 @app.post("/api/experiment/constraint/start")
 async def start_constraint_session(participants: List[str], duration_minutes: int = 10):
     """Start Constraint Lab session."""
-    session_id = f"constraint_{int(__import__('time').time())}"
+    session_id = f"constraint_{int(time.time())}"
     
     if session_id not in constraint_labs:
         constraint_labs[session_id] = ConstraintLaboratory()
