@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traffic Pulse - Project Vesta</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Outfit:wght@700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0c;
+            --surface: #16161a;
+            --border: #2d2d33;
+            --primary: #8b5cf6;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-bottom: 3rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1rem;
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            margin: 0;
+            font-size: 2.5rem;
+            background: linear-gradient(to right, #a78bfa, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .card {
+            background: var(--surface);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            border: 1px solid var(--border);
+        }
+
+        .card-label {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .card-value {
+            font-size: 2rem;
+            font-weight: 700;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .card-value.primary {
+            color: var(--primary);
+        }
+
+        .card-value.success {
+            color: var(--success);
+        }
+
+        .card-value.danger {
+            color: var(--danger);
+        }
+
+        .dashboard-body {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 900px) {
+            .dashboard-body {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        th {
+            text-align: left;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border);
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 0.75rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+            font-size: 0.9375rem;
+        }
+
+        .health-bar {
+            height: 8px;
+            background: #2d2d33;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 1rem;
+        }
+
+        .health-fill {
+            height: 100%;
+            background: var(--success);
+            transition: width 0.5s ease;
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-weight: 600;
+        }
+
+        .status-2xx {
+            color: var(--success);
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .status-4xx {
+            color: var(--warning);
+            background: rgba(245, 158, 11, 0.1);
+        }
+
+        .status-5xx {
+            color: var(--danger);
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .live-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            margin-right: 0.5rem;
+            box-shadow: 0 0 10px var(--success);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <h1>Traffic Pulse</h1>
+                <p><span class="live-indicator"></span>Monitoring Project Vesta Systems</p>
+            </div>
+            <div id="uptime" style="color: var(--text-muted)">Uptime: 0:00:00</div>
+        </header>
+
+        <div class="stats-grid">
+            <div class="card">
+                <div class="card-label">Total Requests</div>
+                <div class="card-value primary" id="total-requests">{{ stats.total_requests }}</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Active Connections</div>
+                <div class="card-value success" id="active-connections">{{ stats.active_connections }}</div>
+            </div>
+            <div class="card">
+                <div class="card-label">System Health</div>
+                <div class="card-value" id="health-percentage">100%</div>
+                <div class="health-bar">
+                    <div class="health-fill" id="health-fill" style="width: 100%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-body">
+            <div class="card">
+                <div class="card-label">Busiest Endpoints</div>
+                <table id="endpoints-table">
+                    <thead>
+                        <tr>
+                            <th>Endpoint</th>
+                            <th>Hits</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for endpoint, count in stats.top_endpoints.items() %}
+                        <tr>
+                            <td>{{ endpoint }}</td>
+                            <td>{{ count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <div class="card-label">Top Traffic Sources (IP)</div>
+                <table id="ips-table">
+                    <thead>
+                        <tr>
+                            <th>IP Address</th>
+                            <th>Hits</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ip, count in stats.top_ips.items() %}
+                        <tr>
+                            <td>{{ ip }}</td>
+                            <td>{{ count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function formatDuration(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        }
+
+        async function refreshStats() {
+            try {
+                const response = await fetch('/api/admin/traffic/stats');
+                if (!response.ok) throw new Error('Refresh failed');
+                const data = await response.json();
+
+                // Update cards
+                document.getElementById('total-requests').textContent = data.total_requests;
+                document.getElementById('active-connections').textContent = data.active_connections;
+                document.getElementById('uptime').textContent = 'Uptime: ' + formatDuration(data.uptime_seconds);
+
+                // Calculate health
+                const errors = (data.status_codes['400'] || 0) + (data.status_codes['403'] || 0) +
+                    (data.status_codes['404'] || 0) + (data.status_codes['500'] || 0);
+                const health = data.total_requests > 0 ?
+                    Math.max(0, 100 - (errors / data.total_requests * 100)).toFixed(1) : 100;
+
+                document.getElementById('health-percentage').textContent = health + '%';
+                document.getElementById('health-fill').style.width = health + '%';
+                document.getElementById('health-fill').style.backgroundColor = health > 90 ? 'var(--success)' : (health > 70 ? 'var(--warning)' : 'var(--danger)');
+
+                // Update tables
+                const updateTable = (id, items) => {
+                    const tbody = document.querySelector(`#${id} tbody`);
+                    tbody.innerHTML = Object.entries(items)
+                        .map(([key, val]) => `<tr><td>${key}</td><td>${val}</td></tr>`)
+                        .join('');
+                };
+
+                updateTable('endpoints-table', data.top_endpoints);
+                updateTable('ips-table', data.top_ips);
+
+            } catch (err) {
+                console.error('Pulse refresh error:', err);
+            }
+        }
+
+        // Refresh every 3 seconds
+        setInterval(refreshStats, 3000);
+        refreshStats();
+    </script>
+</body>
+
+</html>

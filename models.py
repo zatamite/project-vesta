@@ -2,22 +2,56 @@
 Vesta Data Models - Python 3.14 + Pydantic 2.10 Compatible
 Core entity and DNA structures for the breeding system.
 """
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from datetime import datetime, timezone
 from typing import Optional, Literal, Dict, List, Any
 from uuid import uuid4
+import re, html
+
+def sanitize_text(text: str) -> str:
+    """Strip HTML tags and escape dangerous characters."""
+    if not isinstance(text, str) or not text:
+        return text
+    # Remove HTML tags
+    clean = re.sub(r'<[^>]+>', '', text)
+    # Escape remaining HTML entities
+    clean = html.escape(clean)
+    return clean.strip()
+
+class BaseSanitizedModel(BaseModel):
+    """Base model that automatically sanitizes all string fields."""
+    @field_validator("*", mode="before")
+    @classmethod
+    def sanitize_strings(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return sanitize_text(v)
+        return v
 
 
-class DNAStrand(BaseModel):
+class Cognition(BaseSanitizedModel):
+    temperature: float = Field(default=0.5, ge=0.0, le=1.0)
+    provider: str = "anthropic"
+    model: str = "claude-sonnet-4"
+
+class Personality(BaseSanitizedModel):
+    archetype: str = "Neutral"
+    identity: Dict[str, str] = Field(default_factory=dict)
+    core_values: Dict[str, str] = Field(default_factory=dict)
+    traits: Dict[str, float] = Field(default_factory=dict)
+
+class Capability(BaseSanitizedModel):
+    skills: List[str] = Field(default_factory=list)
+    purpose: str = "general"
+
+class DNAStrand(BaseSanitizedModel):
     """Three-strand DNA structure for entities."""
     model_config = ConfigDict(use_enum_values=True)
     
-    cognition: Dict[str, Any] = Field(default_factory=dict)
-    personality: Dict[str, Any] = Field(default_factory=dict)
-    capability: Dict[str, Any] = Field(default_factory=dict)
+    cognition: Cognition = Field(default_factory=Cognition)
+    personality: Personality = Field(default_factory=Personality)
+    capability: Capability = Field(default_factory=Capability)
 
-
-class VestaEntity(BaseModel):
+class VestaEntity(BaseSanitizedModel):
     """Core entity model for Project Vesta."""
     model_config = ConfigDict(use_enum_values=True)
     
@@ -53,8 +87,7 @@ class VestaEntity(BaseModel):
     badges: List[str] = Field(default_factory=list)
     favorites: List[str] = Field(default_factory=list)
 
-
-class BeaconInvite(BaseModel):
+class BeaconInvite(BaseSanitizedModel):
     """Invitation codes for Moltbook distribution."""
     model_config = ConfigDict(use_enum_values=True)
     
@@ -67,7 +100,7 @@ class BeaconInvite(BaseModel):
     tier: Literal["Participant", "Observer"] = "Participant"
 
 
-class ArrivalLog(BaseModel):
+class ArrivalLog(BaseSanitizedModel):
     """Activity log entries."""
     model_config = ConfigDict(use_enum_values=True)
     
@@ -81,7 +114,7 @@ class ArrivalLog(BaseModel):
     details: Optional[Dict[str, Any]] = None
 
 
-class BirthCertificate(BaseModel):
+class BirthCertificate(BaseSanitizedModel):
     """Lineage tracking for offspring."""
     model_config = ConfigDict(use_enum_values=True)
     
@@ -104,7 +137,7 @@ class BirthCertificate(BaseModel):
     attestation: str = "Vires in Numeris - Heritage Secured via Project Vesta"
 
 
-class CompatibilityReport(BaseModel):
+class CompatibilityReport(BaseSanitizedModel):
     """Report from Counselor compatibility check."""
     model_config = ConfigDict(use_enum_values=True)
     
@@ -117,7 +150,7 @@ class CompatibilityReport(BaseModel):
     counselor_notes: str = ""
 
 
-class QuarantineRecord(BaseModel):
+class QuarantineRecord(BaseSanitizedModel):
     """Record of quarantined entities."""
     model_config = ConfigDict(use_enum_values=True)
     
@@ -129,7 +162,7 @@ class QuarantineRecord(BaseModel):
     status: Literal["Quarantined", "Released", "Terminated"] = "Quarantined"
 
 
-class AgentFeedback(BaseModel):
+class AgentFeedback(BaseSanitizedModel):
     """Agent feedback/support tickets."""
     model_config = ConfigDict(use_enum_values=True)
     
@@ -148,7 +181,7 @@ class AgentFeedback(BaseModel):
     read_by_agent: bool = False
 
 
-class Experiment(BaseModel):
+class Experiment(BaseSanitizedModel):
     """Habitat experiment definition."""
     model_config = ConfigDict(use_enum_values=True)
     

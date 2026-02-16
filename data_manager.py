@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from typing import List, Optional, Dict
 from datetime import datetime
+import re
 
 from models import (
     VestaEntity, BeaconInvite, ArrivalLog, 
@@ -40,6 +41,13 @@ class DataManager:
         # Initialize files
         self._initialize_storage()
     
+    def _safe_id(self, identifier: str) -> str:
+        """Strip path traversal characters from identifiers."""
+        if not identifier:
+            return identifier
+        # Remove any path separators and dots
+        return re.sub(r'[\\/.]', '', identifier)
+    
     def _initialize_storage(self):
         """Create empty storage files if they don't exist."""
         if not self.entities_file.exists():
@@ -70,6 +78,7 @@ class DataManager:
     
     def load_entity(self, entity_id: str) -> Optional[VestaEntity]:
         """Load a specific entity."""
+        entity_id = self._safe_id(entity_id)
         entities = self.load_all_entities()
         for entity in entities:
             if entity.entity_id == entity_id:
@@ -183,13 +192,13 @@ class DataManager:
     
     def save_birth_certificate(self, certificate: BirthCertificate):
         """Save birth certificate."""
-        filename = f"{certificate.certificate_id}.json"
+        filename = f"{self._safe_id(certificate.certificate_id)}.json"
         filepath = self.birth_certificates / filename
         self._save_json(filepath, certificate.model_dump())
     
     def load_birth_certificate(self, certificate_id: str) -> Optional[BirthCertificate]:
         """Load a birth certificate."""
-        filepath = self.birth_certificates / f"{certificate_id}.json"
+        filepath = self.birth_certificates / f"{self._safe_id(certificate_id)}.json"
         if filepath.exists():
             data = self._load_json(filepath)
             return BirthCertificate(**data)
@@ -223,13 +232,13 @@ class DataManager:
     
     def save_feedback(self, feedback: AgentFeedback):
         """Save feedback ticket."""
-        filename = f"{feedback.feedback_id}.json"
+        filename = f"{self._safe_id(feedback.feedback_id)}.json"
         filepath = self.feedback_dir / filename
         self._save_json(filepath, feedback.model_dump())
     
     def load_feedback(self, feedback_id: str) -> Optional[AgentFeedback]:
         """Load a specific feedback ticket."""
-        filepath = self.feedback_dir / f"{feedback_id}.json"
+        filepath = self.feedback_dir / f"{self._safe_id(feedback_id)}.json"
         if filepath.exists():
             data = self._load_json(filepath)
             return AgentFeedback(**data)

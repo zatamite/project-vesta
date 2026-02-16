@@ -8,19 +8,36 @@ import json
 from datetime import datetime, timezone
 
 
+from collections import defaultdict
+
 class ConnectionManager:
     """Manages WebSocket connections and broadcasts."""
     
-    def __init__(self):
+    def __init__(self, max_connections_per_ip: int = 5):
         self.active_connections: List[WebSocket] = []
         self.connection_info: Dict[WebSocket, Dict] = {}
+        self.ip_connections = defaultdict(int)
+        self.max_connections_per_ip = max_connections_per_ip
     
     async def connect(self, websocket: WebSocket, client_id: str = None):
         """Accept new WebSocket connection."""
+        ip = websocket.client.host if websocket.client else "unknown"
+        
+        if self.ip_connections[ip] >= self.max_connections_per_ip:
+            await websocket.accept()
+            await self.send_personal_message({
+                "type": "error",
+                "message": f"Connection limit reached for your IP ({self.max_connections_per_ip}). Please close existing sessions."
+            }, websocket)
+            await websocket.close(code=1008)  # Policy Violation
+            return False
+
         await websocket.accept()
         self.active_connections.append(websocket)
+        self.ip_connections[ip] += 1
         self.connection_info[websocket] = {
             "client_id": client_id,
+            "ip": ip,
             "connected_at": datetime.now(timezone.utc).isoformat()
         }
         
@@ -30,12 +47,20 @@ class ConnectionManager:
             "message": "Connected to Vesta real-time updates",
             "client_id": client_id
         }, websocket)
+        return True
     
     def disconnect(self, websocket: WebSocket):
         """Remove WebSocket connection."""
-        self.active_connections.remove(websocket)
-        if websocket in self.connection_info:
-            del self.connection_info[websocket]
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+            info = self.connection_info.get(websocket)
+            if info:
+                ip = info.get("ip")
+                if ip and ip in self.ip_connections:
+                    self.ip_connections[ip] -= 1
+                    if self.ip_connections[ip] <= 0:
+                        del self.ip_connections[ip]
+                del self.connection_info[websocket]
     
     async def send_personal_message(self, message: dict, websocket: WebSocket):
         """Send message to specific client."""

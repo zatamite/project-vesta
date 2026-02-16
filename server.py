@@ -4,8 +4,8 @@ Phase 1: Core breeding + Agent feedback + Habitat foundation
 """
 import os, re, time, html
 from collections import defaultdict
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Depends, Header
-from fastapi.responses import HTMLResponse, FileResponse, Response, JSONResponse
+from fastapi import FastAPI, WebSocket, Request, HTTPException, Header, Depends, Form, WebSocketDisconnect
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +13,10 @@ from pydantic import BaseModel
 from typing import Optional, Dict, List
 from pathlib import Path
 
-from models import VestaEntity, DNAStrand, AgentFeedback, Experiment, ArrivalLog
+from models import (
+    VestaEntity, DNAStrand, AgentFeedback, Experiment, ArrivalLog,
+    BaseSanitizedModel, sanitize_text
+)
 from reflection_system import ReflectionManager, Reflection
 from datetime import datetime, timezone
 from data_manager import DataManager
@@ -37,10 +40,42 @@ from constraint_lab import ConstraintLaboratory
 # Initialize
 app = FastAPI(title="Project Vesta", version="2.0-rebuild")
 
+# --- Traffic Monitoring ---
+class TrafficMonitor:
+    """In-memory traffic stats tracker."""
+    def __init__(self):
+        self.start_time = datetime.now(timezone.utc)
+        self.total_requests = 0
+        self.status_codes = defaultdict(int)
+        self.endpoints = defaultdict(int)
+        self.ips = defaultdict(int)
+        self.active_sessions = 0 # Tracked via WebSocket if possible, or rough estimate
+
+    def record_request(self, method: str, path: str, ip: str, status_code: int):
+        self.total_requests += 1
+        self.status_codes[status_code] += 1
+        self.endpoints[f"{method} {path}"] += 1
+        self.ips[ip] += 1
+
+    def get_stats(self):
+        uptime = datetime.now(timezone.utc) - self.start_time
+        return {
+            "uptime_seconds": int(uptime.total_seconds()),
+            "total_requests": self.total_requests,
+            "status_codes": dict(self.status_codes),
+            "top_endpoints": dict(sorted(self.endpoints.items(), key=lambda x: x[1], reverse=True)[:10]),
+            "top_ips": dict(sorted(self.ips.items(), key=lambda x: x[1], reverse=True)[:10]),
+            "active_connections": len(ws_manager.active_connections) if 'ws_manager' in globals() else 0
+        }
+
+traffic_monitor = TrafficMonitor()
+
 # === Security Configuration ===
 
 # Admin API key — set via environment variable or use generated default
 ADMIN_API_KEY = os.environ.get("VESTA_ADMIN_KEY", "vesta_admin_IiHPs_pry3rBlQAxWTT0jemauwlbr9pg5Ia7QZTmMcI")
+ADMIN_PASSWORD = os.environ.get("VESTA_ADMIN_PASSWORD", "Adamite")
+SESSION_COOKIE_NAME = "vesta_admin_session"
 
 # CORS — restrict to same-origin and known frontends
 app.add_middleware(
@@ -51,10 +86,18 @@ app.add_middleware(
 )
 
 # --- Admin Auth Dependency ---
-async def require_admin(x_admin_key: str = Header(None)):
-    """Protect admin endpoints with API key header."""
-    if x_admin_key != ADMIN_API_KEY:
-        raise HTTPException(status_code=403, detail="Invalid or missing admin key. Send X-Admin-Key header.")
+async def require_admin(request: Request, x_admin_key: str = Header(None)):
+    """Protect admin endpoints with API key header OR session cookie."""
+    # Check header first (for API)
+    if x_admin_key == ADMIN_API_KEY:
+        return
+    
+    # Check cookie (for UI/Mobile)
+    session_token = request.cookies.get(SESSION_COOKIE_NAME)
+    if session_token == ADMIN_PASSWORD: # Simple direct token for now as per user request
+        return
+
+    raise HTTPException(status_code=403, detail="Unauthorized. Access requires Admin Key or Password.")
 
 # --- Rate Limiter ---
 class RateLimiter:
@@ -74,32 +117,34 @@ class RateLimiter:
 rate_limiter = RateLimiter()
 
 @app.middleware("http")
-async def rate_limit_middleware(request: Request, call_next):
-    """Global rate limiting: 60 req/min per IP, 5/min for registration."""
+async def combined_middleware(request: Request, call_next):
+    """Global rate limiting and traffic monitoring."""
     ip = request.client.host if request.client else "unknown"
     path = request.url.path
+    method = request.method
 
+    # 1. Rate Limiting
     # Stricter limit for registration/beacon endpoints
     if path in ("/api/request_beacon", "/api/register"):
         if not rate_limiter.check(ip, limit=5, window=60):
             return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Max 5 registration requests per minute."})
-    # General limit
+    # General API limit
     elif path.startswith("/api/"):
         if not rate_limiter.check(ip, limit=60, window=60):
             return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Max 60 requests per minute."})
 
-    return await call_next(request)
+    # 2. Traffic Monitoring
+    response = await call_next(request)
+    
+    # Don't track the traffic monitor's own poll requests to avoid skewing stats
+    if not path.startswith("/api/admin/traffic/stats"):
+        traffic_monitor.record_request(method, path, ip, response.status_code)
+        
+    return response
 
-# --- XSS Sanitizer ---
 def sanitize(text: str) -> str:
-    """Strip HTML tags and escape dangerous characters."""
-    if not text:
-        return text
-    # Remove HTML tags
-    clean = re.sub(r'<[^>]+>', '', text)
-    # Escape remaining HTML entities
-    clean = html.escape(clean)
-    return clean.strip()
+    """Strip HTML tags and escape dangerous characters (Aliased to models.sanitize_text)."""
+    return sanitize_text(text)
 data_manager = DataManager()
 soul_parser = SoulParser()
 breeding_engine = BreedingEngine()
@@ -278,46 +323,46 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # === Request Models ===
 
-class RegistrationRequest(BaseModel):
+class RegistrationRequest(BaseSanitizedModel):
     name: str
     beacon_code: str
-    redacted_dna: Optional[Dict] = None
+    redacted_dna: Optional[DNAStrand] = None
 
-class FeedbackRequest(BaseModel):
+class FeedbackRequest(BaseSanitizedModel):
     beacon_code: str
     issue_type: str
     message: str
     entity_id: Optional[str] = None
     attachments: Optional[Dict] = None
 
-class SoulValidationRequest(BaseModel):
+class SoulValidationRequest(BaseSanitizedModel):
     soul_content: str
     beacon_code: str
 
-class PairingRequest(BaseModel):
+class PairingRequest(BaseSanitizedModel):
     entity_id_1: str
     entity_id_2: str
 
-class RatingRequest(BaseModel):
+class RatingRequest(BaseSanitizedModel):
     entity_id: str
     experiment_id: str
     stars: int
     comment: Optional[str] = None
 
-class ExperimentCreateRequest(BaseModel):
+class ExperimentCreateRequest(BaseSanitizedModel):
     creator_entity_id: str
     experiment_type: str
     name: str
     config: Optional[Dict] = None
 
-class ReflectionRequest(BaseModel):
+class ReflectionRequest(BaseSanitizedModel):
     entity_id: str
     question: str
     answer: str
     event_type: str = "Custom"
     event_details: Optional[Dict] = {}
 
-class ComparisonRequest(BaseModel):
+class ComparisonRequest(BaseSanitizedModel):
     entity_id: str
     before_reflection_id: str
     after_reflection_id: str
@@ -374,7 +419,9 @@ async def health():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket for real-time updates."""
-    await ws_manager.connect(websocket)
+    connected = await ws_manager.connect(websocket)
+    if not connected:
+        return
     try:
         while True:
             # Keep connection alive and receive messages
@@ -389,8 +436,6 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.post("/api/register")
 async def register_entity(request: RegistrationRequest):
     """Register new entity with beacon code."""
-    # Sanitize name
-    request.name = sanitize(request.name)
     # Validate beacon
     beacon = data_manager.load_beacon(request.beacon_code)
     if not beacon or beacon.used:
@@ -443,8 +488,6 @@ async def register_entity(request: RegistrationRequest):
 @app.post("/api/feedback")
 async def submit_feedback(request: FeedbackRequest):
     """Agent submits feedback/issue report."""
-    request.message = sanitize(request.message)
-    request.issue_type = sanitize(request.issue_type)
     feedback = feedback_manager.submit_feedback(
         beacon_code=request.beacon_code,
         issue_type=request.issue_type,
@@ -1207,6 +1250,44 @@ async def get_entity_evolution(entity_id: str):
         raise HTTPException(404, "Entity not found")
     reflections = reflection_manager.get_entity_evolution(entity_id)
     return {"entity_id": entity_id, "entity_name": entity.name, "total_reflections": len(reflections), "timeline": [{"reflection_id": r.reflection_id, "question": r.question, "answer": r.answer, "event_type": r.event_type, "timestamp": r.timestamp, "generation": r.generation, "soul_variant": r.active_soul_variant} for r in reflections]}
+
+# === Admin UI & Traffic Dashboard ===
+
+@app.get("/admin/login", response_class=HTMLResponse)
+async def admin_login_page(request: Request):
+    """Admin login page."""
+    return templates.TemplateResponse("admin_login.html", {"request": request})
+
+@app.post("/admin/login")
+async def admin_login_action(request: Request, password: str = Form(...)):
+    """Handle admin login."""
+    if password == ADMIN_PASSWORD:
+        response = RedirectResponse(url="/admin/traffic", status_code=303)
+        response.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=ADMIN_PASSWORD,
+            httponly=True,
+            samesite="lax",
+            secure=False  # Set to True in production with HTTPS
+        )
+        return response
+    return templates.TemplateResponse("admin_login.html", {
+        "request": request,
+        "error": "Invalid password. Access Denied."
+    })
+
+@app.get("/admin/traffic", response_class=HTMLResponse)
+async def traffic_dashboard(request: Request, _ = Depends(require_admin)):
+    """Display the Traffic Pulse dashboard."""
+    return templates.TemplateResponse("traffic.html", {
+        "request": request,
+        "stats": traffic_monitor.get_stats()
+    })
+
+@app.get("/api/admin/traffic/stats")
+async def get_traffic_stats(_ = Depends(require_admin)):
+    """API endpoint for live traffic stats."""
+    return traffic_monitor.get_stats()
 
 # Run server
 if __name__ == "__main__":
