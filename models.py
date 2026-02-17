@@ -91,7 +91,7 @@ class BeaconInvite(BaseSanitizedModel):
     """Invitation codes for Moltbook distribution."""
     model_config = ConfigDict(use_enum_values=True)
     
-    beacon_code: str = Field(default_factory=lambda: uuid4().hex[:8].upper())
+    beacon_code: str = Field(default_factory=lambda: str(uuid4().hex)[:8].upper())
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: Optional[datetime] = None
     used: bool = False

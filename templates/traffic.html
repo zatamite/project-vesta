@@ -48,6 +48,7 @@
             font-size: 2.5rem;
             background: linear-gradient(to right, #a78bfa, #8b5cf6);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
@@ -101,6 +102,10 @@
             .dashboard-body {
                 grid-template-columns: 1fr;
             }
+        }
+
+        .dashboard-body.three-col {
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
         }
 
         table {
@@ -160,6 +165,23 @@
             background: rgba(239, 68, 68, 0.1);
         }
 
+        .status-429 {
+            color: var(--warning);
+            background: rgba(245, 158, 11, 0.2);
+            border: 1px solid var(--warning);
+        }
+
+        .error-log {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .timestamp {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            font-family: monospace;
+        }
+
         .live-indicator {
             display: inline-block;
             width: 8px;
@@ -207,6 +229,14 @@
                 <div class="card-value success" id="active-connections">{{ stats.active_connections }}</div>
             </div>
             <div class="card">
+                <div class="card-label">Avg. Response Time</div>
+                <div class="card-value" id="avg-rt">{{ stats.avg_response_time_ms }}ms</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Rate Limit Hits</div>
+                <div class="card-value danger" id="rate-limit-hits">{{ stats.rate_limit_hits }}</div>
+            </div>
+            <div class="card">
                 <div class="card-label">System Health</div>
                 <div class="card-value" id="health-percentage">100%</div>
                 <div class="health-bar">
@@ -215,7 +245,7 @@
             </div>
         </div>
 
-        <div class="dashboard-body">
+        <div class="dashboard-body three-col">
             <div class="card">
                 <div class="card-label">Busiest Endpoints</div>
                 <table id="endpoints-table">
@@ -255,6 +285,54 @@
                     </tbody>
                 </table>
             </div>
+
+            <div class="card">
+                <div class="card-label">Top Rate-Limited IPs</div>
+                <table id="rl-ips-table">
+                    <thead>
+                        <tr>
+                            <th>IP Address</th>
+                            <th>Limit Hits</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ip, count in stats.top_rate_limited_ips.items() %}
+                        <tr>
+                            <td>{{ ip }}</td>
+                            <td>{{ count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 2rem;">
+            <div class="card-label">Recent Operational Errors (4xx/5xx)</div>
+            <div class="error-log">
+                <table id="errors-table">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Method</th>
+                            <th>Path</th>
+                            <th>IP</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for err in stats.recent_errors %}
+                        <tr>
+                            <td class="timestamp">{{ err.timestamp }}</td>
+                            <td>{{ err.method }}</td>
+                            <td>{{ err.path }}</td>
+                            <td>{{ err.ip }}</td>
+                            <td><span class="status-badge status-{{ err.status }}">{{ err.status }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -275,6 +353,8 @@
                 // Update cards
                 document.getElementById('total-requests').textContent = data.total_requests;
                 document.getElementById('active-connections').textContent = data.active_connections;
+                document.getElementById('avg-rt').textContent = data.avg_response_time_ms + 'ms';
+                document.getElementById('rate-limit-hits').textContent = data.rate_limit_hits;
                 document.getElementById('uptime').textContent = 'Uptime: ' + formatDuration(data.uptime_seconds);
 
                 // Calculate health
@@ -297,6 +377,19 @@
 
                 updateTable('endpoints-table', data.top_endpoints);
                 updateTable('ips-table', data.top_ips);
+                updateTable('rl-ips-table', data.top_rate_limited_ips);
+
+                // Update Errors
+                const errorBody = document.querySelector('#errors-table tbody');
+                errorBody.innerHTML = data.recent_errors.map(err => `
+                    <tr>
+                        <td class="timestamp">${new Date(err.timestamp).toLocaleTimeString()}</td>
+                        <td>${err.method}</td>
+                        <td>${err.path}</td>
+                        <td>${err.ip}</td>
+                        <td><span class="status-badge status-${err.status}">${err.status}</span></td>
+                    </tr>
+                `).join('');
 
             } catch (err) {
                 console.error('Pulse refresh error:', err);

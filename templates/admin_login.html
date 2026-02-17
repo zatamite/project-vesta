@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Login - Project Vesta</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Outfit:wght@700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Outfit:wght@700&display=swap"
+        rel="stylesheet">
     <style>
         :root {
             --bg: #0a0a0c;
@@ -44,6 +46,7 @@
             margin-bottom: 0.5rem;
             background: linear-gradient(to right, #a78bfa, #8b5cf6);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
@@ -113,15 +116,16 @@
         }
     </style>
 </head>
+
 <body>
     <div class="login-card">
         <h1>Entry Protocol</h1>
         <p>Project Vesta Traffic Pulse</p>
-        
+
         {% if error %}
         <div class="error">{{ error }}</div>
         {% endif %}
-        
+
         <form action="/admin/login" method="post">
             <div class="form-group">
                 <label for="password">Admin Password</label>
@@ -131,4 +135,5 @@
         </form>
     </div>
 </body>
+
 </html>

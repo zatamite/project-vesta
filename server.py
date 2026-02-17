@@ -46,35 +46,69 @@ class TrafficMonitor:
     def __init__(self):
         self.start_time = datetime.now(timezone.utc)
         self.total_requests = 0
+        self.rate_limit_hits = 0
         self.status_codes: Dict[int, int] = {}
         self.endpoints: Dict[str, int] = {}
         self.ips: Dict[str, int] = {}
+        self.rate_limited_ips: Dict[str, int] = {}
+        self.response_times: List[float] = [] # Last 100 request durations
+        self.recent_errors: List[Dict] = []  # Last 10 4xx/5xx requests
         self.active_sessions = 0 # Tracked via WebSocket if possible, or rough estimate
 
-    def record_request(self, method: str, path: str, ip: str, status_code: int):
+    def record_request(self, method: str, path: str, ip: str, status_code: int, duration: float = 0):
         self.total_requests += 1
+        
+        # Track response time (keep last 100)
+        self.response_times.append(duration)
+        if len(self.response_times) > 100:
+            self.response_times.pop(0)
+
         # Manual counts instead of defaultdict to avoid linter confusion
         self.status_codes[status_code] = self.status_codes.get(status_code, 0) + 1
         endpoint_key = f"{method} {path}"
         self.endpoints[endpoint_key] = self.endpoints.get(endpoint_key, 0) + 1
         self.ips[ip] = self.ips.get(ip, 0) + 1
 
+        # Log errors
+        if status_code >= 400:
+            self.recent_errors.insert(0, {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "method": method,
+                "path": path,
+                "ip": ip,
+                "status": status_code
+            })
+            if len(self.recent_errors) > 10:
+                self.recent_errors.pop()
+
+    def record_rate_limit(self, ip: str):
+        self.rate_limit_hits += 1
+        self.rate_limited_ips[ip] = self.rate_limited_ips.get(ip, 0) + 1
+
     def get_stats(self):
         uptime = datetime.now(timezone.utc) - self.start_time
         # Convert to list before slicing to satisfy some linters
         top_endpoints_list = sorted(self.endpoints.items(), key=lambda x: x[1], reverse=True)
         top_ips_list = sorted(self.ips.items(), key=lambda x: x[1], reverse=True)
+        top_rl_ips_list = sorted(self.rate_limited_ips.items(), key=lambda x: x[1], reverse=True)
         
         # Use explicit list comprehension instead of slice for picky linters
         top_end = [top_endpoints_list[i] for i in range(min(10, len(top_endpoints_list)))]
         top_ip_slice = [top_ips_list[i] for i in range(min(10, len(top_ips_list)))]
+        top_rl_ip_slice = [top_rl_ips_list[i] for i in range(min(5, len(top_rl_ips_list)))]
         
+        avg_rt = sum(self.response_times) / len(self.response_times) if self.response_times else 0
+
         return {
             "uptime_seconds": int(uptime.total_seconds()),
             "total_requests": self.total_requests,
+            "rate_limit_hits": self.rate_limit_hits,
+            "avg_response_time_ms": int(avg_rt * 1000),
             "status_codes": dict(self.status_codes),
+            "recent_errors": self.recent_errors,
             "top_endpoints": dict(top_end),
             "top_ips": dict(top_ip_slice),
+            "top_rate_limited_ips": dict(top_rl_ip_slice),
             "active_connections": len(ws_manager.active_connections) if 'ws_manager' in globals() else 0
         }
 
@@ -132,6 +166,7 @@ rate_limiter = RateLimiter()
 @app.middleware("http")
 async def combined_middleware(request: Request, call_next):
     """Global rate limiting and traffic monitoring."""
+    start_time = time.time()
     ip = request.client.host if request.client else "unknown"
     path = request.url.path
     method = request.method
@@ -140,10 +175,12 @@ async def combined_middleware(request: Request, call_next):
     # Stricter limit for registration/beacon endpoints
     if path in ("/api/request_beacon", "/api/register"):
         if not rate_limiter.check(ip, limit=5, window=60):
+            traffic_monitor.record_rate_limit(ip)
             return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Max 5 registration requests per minute."})
     # General API limit
     elif path.startswith("/api/"):
         if not rate_limiter.check(ip, limit=60, window=60):
+            traffic_monitor.record_rate_limit(ip)
             return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Max 60 requests per minute."})
 
     # 2. Traffic Monitoring
@@ -151,7 +188,8 @@ async def combined_middleware(request: Request, call_next):
     
     # Don't track the traffic monitor's own poll requests to avoid skewing stats
     if not path.startswith("/api/admin/traffic/stats"):
-        traffic_monitor.record_request(method, path, ip, response.status_code)
+        duration = time.time() - start_time
+        traffic_monitor.record_request(method, path, ip, response.status_code, duration)
         
     return response
 
@@ -1003,7 +1041,6 @@ async def list_entities():
 @app.get("/api/entities/{entity_id}/soul")
 async def download_soul(entity_id: str):
     """Download entity soul as markdown."""
-    from fastapi.responses import Response
     import json
     
     entity = data_manager.load_entity(entity_id)
@@ -1048,7 +1085,7 @@ async def get_soul_variants_list(entity_id: str):
 @app.get("/api/entities/{entity_id}/variant_content")
 async def get_variant_content(entity_id: str, variant: str):
     """Get specific soul variant content."""
-    from fastapi.responses import Response
+
     
     entity = data_manager.load_entity(entity_id)
     if not entity:

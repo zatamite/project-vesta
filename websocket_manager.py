@@ -3,7 +3,7 @@ WebSocket Manager for Real-Time Updates
 Broadcasts events to connected clients.
 """
 from fastapi import WebSocket, WebSocketDisconnect
-from typing import List, Dict
+from typing import List, Dict, Optional
 import json
 from datetime import datetime, timezone
 
@@ -16,14 +16,14 @@ class ConnectionManager:
     def __init__(self, max_connections_per_ip: int = 5):
         self.active_connections: List[WebSocket] = []
         self.connection_info: Dict[WebSocket, Dict] = {}
-        self.ip_connections = defaultdict(int)
+        self.ip_connections: Dict[str, int] = {}
         self.max_connections_per_ip = max_connections_per_ip
     
-    async def connect(self, websocket: WebSocket, client_id: str = None):
+    async def connect(self, websocket: WebSocket, client_id: Optional[str] = None):
         """Accept new WebSocket connection."""
         ip = websocket.client.host if websocket.client else "unknown"
         
-        if self.ip_connections[ip] >= self.max_connections_per_ip:
+        if self.ip_connections.get(ip, 0) >= self.max_connections_per_ip:
             await websocket.accept()
             await self.send_personal_message({
                 "type": "error",
@@ -34,7 +34,7 @@ class ConnectionManager:
 
         await websocket.accept()
         self.active_connections.append(websocket)
-        self.ip_connections[ip] += 1
+        self.ip_connections[ip] = self.ip_connections.get(ip, 0) + 1
         self.connection_info[websocket] = {
             "client_id": client_id,
             "ip": ip,
@@ -57,10 +57,11 @@ class ConnectionManager:
             if info:
                 ip = info.get("ip")
                 if ip and ip in self.ip_connections:
-                    self.ip_connections[ip] -= 1
+                    self.ip_connections[ip] = max(0, self.ip_connections[ip] - 1)
                     if self.ip_connections[ip] <= 0:
-                        del self.ip_connections[ip]
-                del self.connection_info[websocket]
+                        self.ip_connections.pop(ip, None)
+                if websocket in self.connection_info:
+                    self.connection_info.pop(websocket, None)
     
     async def send_personal_message(self, message: dict, websocket: WebSocket):
         """Send message to specific client."""
